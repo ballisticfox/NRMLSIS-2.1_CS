@@ -1,0 +1,5 @@
+.DS_Store
+/NRMLSIS/obj
+/NRMLSIS/bin
+NRMLSIS/msis2.1_test_out.txt
+msis2.1_test_compare.txt
