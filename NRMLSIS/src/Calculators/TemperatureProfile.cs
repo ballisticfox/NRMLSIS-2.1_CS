@@ -26,7 +26,7 @@
 using System;
 using System.Linq;
 
-namespace NRLMSIS
+namespace NRLMSIS.Calculators
 {
     /// <summary>
     /// Temperature profile parameters structure
@@ -59,17 +59,17 @@ namespace NRLMSIS
     /// <summary>
     /// Temperature and species-independent profile functions
     /// </summary>
-    public static class MsisTfn
+    public static class TemperatureFunction
     {
         // ==================================================================================================
-        // TFNPARM: Compute the vertical temperature and species-independent profile parameters
+        // TemperatureParameters: Compute the vertical temperature and species-independent profile parameters
         // ==================================================================================================
         /// <summary>
         /// Compute the vertical temperature and species-independent profile parameters
         /// </summary>
         /// <param name="gf">Array of horizontal and temporal basis function terms [0:maxnbf-1]</param>
         /// <param name="tpro">Output structure containing temperature vertical profile parameters</param>
-        public static void TfnParm(double[] gf, out TemperatureProfile tpro)
+        public static void TemperatureParameters(double[] gf, out TemperatureProfile tpro)
         {
             tpro = new TemperatureProfile();
 

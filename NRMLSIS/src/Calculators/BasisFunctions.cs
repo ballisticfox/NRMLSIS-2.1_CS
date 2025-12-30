@@ -19,7 +19,7 @@
 
 using System;
 
-namespace NRLMSIS
+namespace NRLMSIS.Calculators
 {
     /// <summary>
     /// Global basis functions for NRLMSIS 2.1

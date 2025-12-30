@@ -24,7 +24,7 @@
 
 using System;
 
-namespace NRLMSIS
+namespace NRLMSIS.Calculators
 {
     /// <summary>
     /// Main MSIS calculation entry point with improved thread-safety and validation.
@@ -114,7 +114,7 @@ namespace NRLMSIS
                 Array.Copy(gf, context.BasisFunctions, gf.Length);
 
                 // Calculate temperature profile parameters
-                MsisTfn.TfnParm(context.BasisFunctions, out var tpro);
+                TemperatureFunction.TemperatureParameters(context.BasisFunctions, out var tpro);
 
                 // Copy temperature profile to context
                 CopyTemperatureProfile(tpro, context.TemperatureProfile);
@@ -124,7 +124,7 @@ namespace NRLMSIS
                 {
                     if (Initialization.SpecFlag[ispec - 1])
                     {
-                        DensityProfile.DfnParm(ispec, context.BasisFunctions,
+                        DensityProfile.DensityParameters(ispec, context.BasisFunctions,
                                        context.TemperatureProfile,
                                        out var dpro);
                         CopyDensityProfile(dpro, context.DensityProfiles[ispec]);
@@ -216,7 +216,7 @@ namespace NRLMSIS
         /// <summary>
         /// Calculates temperature at the specified altitude using cached profile parameters.
         /// </summary>
-        private static double CalculateTemperature(double altitude, Context context)
+        internal static double CalculateTemperature(double altitude, Context context)
         {
             // Extract spline weights for temperature calculation (order 4 = cubic)
             // Fortran: Sz(-3:0, 4) maps to C# Sz[2:5, 2]
@@ -227,14 +227,14 @@ namespace NRLMSIS
             }
 
             // Calculate temperature at altitude
-            return MsisTfn.TfnX(altitude, context.SplineIndex, wght.ToArray(),
+            return TemperatureFunction.TfnX(altitude, context.SplineIndex, wght.ToArray(),
                                context.TemperatureProfile);
         }
 
         /// <summary>
         /// Calculates densities for all enabled species at the specified altitude.
         /// </summary>
-        private static void CalculateDensities(
+        internal static void CalculateDensities(
             double altitude,
             double temperature,
             Context context,

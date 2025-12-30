@@ -8,6 +8,7 @@
 // #######################################################################
 
 using System;
+using NRLMSIS.Calculators;
 
 namespace NRLMSIS
 {

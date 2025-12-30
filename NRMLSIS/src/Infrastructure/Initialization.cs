@@ -159,7 +159,7 @@ namespace NRLMSIS
         /// <summary>
         /// Initialize MSIS model and load parameters
         /// </summary>
-        public static void Initializationialize(
+        public static void Initialize(
             string parmPath = "",
             string parmFile = "msis21.parm",
             bool[]? switchGfn = null,
@@ -459,7 +459,7 @@ namespace NRLMSIS
             i1 = i0 + NO.Nl - NO.Bl;
             CopyParameters(parmIn, NO.Beta, i0, i1, NO.Bl, NO.Nl);
 
-            // Set solar flux modulation flags; if on for a given vertical parameter, then sfluxmod is called by tfnparm
+            // Set solar flux modulation flags; if on for a given vertical parameter, then sfluxmod is called by TemperatureParameters
             Smod = new bool[Constants.Nl + 1];
             for (int iz = 0; iz <= Constants.Nl; iz++)
             {

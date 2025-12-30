@@ -23,7 +23,7 @@
 
 using System;
 
-namespace NRLMSIS
+namespace NRLMSIS.Calculators
 {
     /// <summary>
     /// Density profile parameters structure
@@ -61,7 +61,7 @@ namespace NRLMSIS
     public static class DensityProfile
     {
         // ==================================================================================================
-        // DFNPARM: Compute the species density profile parameters
+        // DensityParameters: Compute the species density profile parameters
         // ==================================================================================================
         /// <summary>
         /// Compute the species density profile parameters
@@ -70,7 +70,7 @@ namespace NRLMSIS
         /// <param name="gf">Array of horizontal and temporal basis function terms [0:maxnbf-1]</param>
         /// <param name="tpro">Structure containing temperature vertical profile parameters</param>
         /// <param name="dpro">Output: density vertical profile parameters</param>
-        public static void DfnParm(int ispec, double[] gf, TemperatureProfile tpro, out DensityParameters dpro)
+        public static void DensityParameters(int ispec, double[] gf, TemperatureProfile tpro, out DensityParameters dpro)
         {
             dpro = new DensityParameters();
             dpro.ISpec = ispec;

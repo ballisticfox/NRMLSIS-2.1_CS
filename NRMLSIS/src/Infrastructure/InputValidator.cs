@@ -389,8 +389,8 @@ namespace NRLMSIS
             {
                 throw new InvalidOperationException(
                     "MSIS model has not been initialized. " +
-                    "Call Initialization.Initializationialize() before performing calculations. " +
-                    "Example: Initialization.Initializationialize(parmPath: \"./\", parmFile: \"msis21.parm\");");
+                    "Call Initialization.Initialize() before performing calculations. " +
+                    "Example: Initialization.Initialize(parmPath: \"./\", parmFile: \"msis21.parm\");");
             }
         }
     }

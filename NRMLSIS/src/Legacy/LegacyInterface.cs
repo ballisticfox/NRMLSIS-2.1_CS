@@ -15,7 +15,7 @@
 // GTD8D: Legacy wrapper with input and output arguments used in NRLMSISE-00
 //
 //     PREREQUISITES:
-//       Must first run Initialization.Initializationialize to load parameters and set switches. The
+//       Must first run Initialization.Initialize to load parameters and set switches. The
 //       MsisCalc.Calculate method checks for initialization and does a default
 //       initialization if necessary. This self-initialization will be removed
 //       in future versions.
@@ -43,18 +43,18 @@
 //                    prior to current time
 //                [6] Average of eight 3 hr ap indices from 36 to 57 hrs
 //                    prior to current time
-//              ap[1:6] are only used when switch_legacy[8] = -1.0 in Initializationialize
+//              ap[1:6] are only used when switch_legacy[8] = -1.0 in Initialize
 //       mass   Mass number (Ignored in 2.1)
 //
 //     NOTES ON INPUT VARIABLES:
-//       - If lZAltType = false in the Initializationialize call, then the alt input
+//       - If lZAltType = false in the Initialize call, then the alt input
 //         argument is treated as geopotential height.
 //       - The stl input argument is ignored in NRLMSIS 2.1. Instead, local time
 //         is computed from universal time and longitude.
 //       - F107 and F107A values are the 10.7 cm radio flux at the Sun-Earth
 //         distance, not the radio flux at 1 AU.
 //       - The mass input argument is ignored in NRLMSIS 2.1; species to be
-//         calculated are set in Initializationialize.
+//         calculated are set in Initialize.
 //
 //     OUTPUT VARIABLES:
 //       d[0]  He number density (cm-3)
@@ -72,13 +72,14 @@
 //
 //     NOTES ON OUTPUT VARIABLES:
 //       - Missing density values are returned as 9.999e-38
-//       - Species included in mass density calculation are set in Initializationialize
+//       - Species included in mass density calculation are set in Initialize
 //
 // ===========================================================================
 
 using System;
+using NRLMSIS.Calculators;
 
-namespace NRLMSIS
+namespace NRLMSIS.Legacy
 {
     /// <summary>
     /// Legacy NRLMSISE-00 compatible interface wrapper
