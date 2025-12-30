@@ -12,6 +12,7 @@ using System.Collections.Generic;
 using NRLMSIS.Core;
 using NRLMSIS.Configuration;
 using NRLMSIS.Calculators;
+using NRLMSIS.Infrastructure;
 
 namespace NRLMSIS.Models
 {
@@ -40,7 +41,7 @@ namespace NRLMSIS.Models
         /// <summary>Calculate atmospheric parameters at a single location.</summary>
         public AtmosphericState Calculate(AtmosphericLocation location, SpaceWeather weather)
         {
-            using var context = new NRLMSIS.Context();
+            using var context = new Context();
             return Calculate(location, weather, context);
         }
 
@@ -92,7 +93,7 @@ namespace NRLMSIS.Models
 
             ValidateWeather(weather);
 
-            using var context = new NRLMSIS.Context();
+            using var context = new Context();
 
             foreach (var location in locations)
             {
@@ -102,18 +103,18 @@ namespace NRLMSIS.Models
 
         private static void ValidateLocation(AtmosphericLocation location)
         {
-            NRLMSIS.InputValidator.ValidateDayOfYear(location.DayOfYear);
-            NRLMSIS.InputValidator.ValidateUniversalTime(location.UniversalTimeSeconds);
-            NRLMSIS.InputValidator.ValidateAltitude(location.AltitudeKm);
-            NRLMSIS.InputValidator.ValidateLatitude(location.LatitudeDegrees);
-            NRLMSIS.InputValidator.ValidateLongitude(location.LongitudeDegrees);
+            InputValidator.ValidateDayOfYear(location.DayOfYear);
+            InputValidator.ValidateUniversalTime(location.UniversalTimeSeconds);
+            InputValidator.ValidateAltitude(location.AltitudeKm);
+            InputValidator.ValidateLatitude(location.LatitudeDegrees);
+            InputValidator.ValidateLongitude(location.LongitudeDegrees);
         }
 
         private static void ValidateWeather(SpaceWeather weather)
         {
-            NRLMSIS.InputValidator.ValidateF107Average(weather.F107Average);
-            NRLMSIS.InputValidator.ValidateF107Daily(weather.F107Daily);
-            NRLMSIS.InputValidator.ValidateApArray(weather.ApIndices);
+            InputValidator.ValidateF107Average(weather.F107Average);
+            InputValidator.ValidateF107Daily(weather.F107Daily);
+            InputValidator.ValidateApArray(weather.ApIndices);
         }
     }
 }

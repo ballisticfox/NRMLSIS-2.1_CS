@@ -7,9 +7,8 @@
 // CONDITIONS OF THE LICENSE.
 // #######################################################################
 
-using System;
-using System.Collections.Generic;
-using System.Linq;
+
+using NRLMSIS.Infrastructure;
 
 namespace NRLMSIS.Configuration
 {
@@ -84,7 +83,7 @@ namespace NRLMSIS.Configuration
         public static MSISConfiguration CreateDefault()
         {
             // If Initialization has been run, use its values
-            if (NRLMSIS.Initialization.InitFlag)
+            if (Initialization.InitFlag)
             {
                 return MsisConfigurationFactory.FromInitialization();
             }
@@ -106,7 +105,7 @@ namespace NRLMSIS.Configuration
             for (int i = 0; i < 10; i++)
             {
                 if (builder.SpeciesEnabled[i] && i > 0)
-                    builder.MassWeights[i] = NRLMSIS.Constants.SpecMass[i + 1];
+                    builder.MassWeights[i] = Constants.SpecMass[i + 1];
             }
 
             // Add empty species configs to satisfy validation

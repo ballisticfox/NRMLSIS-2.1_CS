@@ -9,7 +9,7 @@
 
 using System;
 
-namespace NRLMSIS
+namespace NRLMSIS.Infrastructure
 {
     /// <summary>
     /// Constants for B-spline calculations, making index mapping explicit and type-safe.

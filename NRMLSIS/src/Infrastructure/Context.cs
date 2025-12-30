@@ -10,7 +10,7 @@
 using System;
 using NRLMSIS.Calculators;
 
-namespace NRLMSIS
+namespace NRLMSIS.Infrastructure
 {
     /// <summary>
     /// Computation context that caches intermediate results for performance optimization.

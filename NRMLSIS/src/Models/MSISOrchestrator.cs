@@ -11,6 +11,7 @@ using System;
 using NRLMSIS.Core;
 using NRLMSIS.Configuration;
 using NRLMSIS.Calculators;
+using NRLMSIS.Infrastructure;
 
 namespace NRLMSIS.Models
 {
@@ -36,7 +37,7 @@ namespace NRLMSIS.Models
             try
             {
                 double geopotentialHeight = _config.UseGeodeticAltitude
-                    ? NRLMSIS.Utilities.Alt2Gph(location.LatitudeDegrees, location.AltitudeKm)
+                    ? Utilities.Alt2Gph(location.LatitudeDegrees, location.AltitudeKm)
                     : location.AltitudeKm;
 
                 var basisFunctions = GetOrCalculateBasisFunctions(location, weather, context);
@@ -112,7 +113,7 @@ namespace NRLMSIS.Models
 
         private TemperatureProfile GetOrCalculateTemperatureProfile(
             double[] basisFunctions,
-            NRLMSIS.Context context)
+            Context context)
         {
             TemperatureFunction.TemperatureParameters(basisFunctions, out var tpro);
             CopyTemperatureProfile(tpro, context.TemperatureProfile);
@@ -134,19 +135,19 @@ namespace NRLMSIS.Models
             }
         }
 
-        private void UpdateSplineWeightsIfNeeded(double geopotentialHeight, NRLMSIS.Context context)
+        private void UpdateSplineWeightsIfNeeded(double geopotentialHeight, Context context)
         {
             if (!context.IsAltitudeChanged(geopotentialHeight))
                 return;
 
-            int maxOrder = geopotentialHeight < NRLMSIS.AltitudeRegimes.ZetaF ? 5 : 6;
+            int maxOrder = geopotentialHeight < AltitudeRegimes.ZetaF ? 5 : 6;
 
-            NRLMSIS.Utilities.BSpline(
+            Utilities.BSpline(
                 geopotentialHeight,
-                NRLMSIS.Constants.NodesTN,
-                NRLMSIS.Constants.Nd + 2,
+                Constants.NodesTN,
+                Constants.Nd + 2,
                 maxOrder,
-                NRLMSIS.Initialization.EtaTN,
+                Initialization.EtaTN,
                 out double[,] splineWeights,
                 out int splineIndex);
 
@@ -158,7 +159,7 @@ namespace NRLMSIS.Models
         private SpeciesDensities CalculateDensities(
             double geopotentialHeight,
             double temperature,
-            NRLMSIS.Context context)
+            Context context)
         {
             var densities = new double[10];
             MSISCalculator.CalculateDensities(geopotentialHeight, temperature, context, densities);

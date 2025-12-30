@@ -9,7 +9,7 @@
 
 using System;
 
-namespace NRLMSIS
+namespace NRLMSIS.Infrastructure
 {
     /// <summary>
     /// Validates input parameters for MSIS atmospheric model calculations.

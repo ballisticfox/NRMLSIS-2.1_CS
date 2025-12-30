@@ -25,6 +25,7 @@
 
 using System;
 using System.Linq;
+using NRLMSIS.Infrastructure;
 
 namespace NRLMSIS.Calculators
 {

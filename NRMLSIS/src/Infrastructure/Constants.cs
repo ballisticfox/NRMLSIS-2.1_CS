@@ -18,7 +18,7 @@
 
 using System;
 
-namespace NRLMSIS
+namespace NRLMSIS.Infrastructure
 {
     /// <summary>
     /// Constants and hardwired parameters for NRLMSIS 2.1

@@ -78,6 +78,7 @@
 
 using System;
 using NRLMSIS.Calculators;
+using NRLMSIS.Infrastructure;
 
 namespace NRLMSIS.Legacy
 {

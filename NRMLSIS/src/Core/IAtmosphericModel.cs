@@ -8,6 +8,7 @@
 // #######################################################################
 
 using System.Collections.Generic;
+using NRLMSIS.Infrastructure;
 
 namespace NRLMSIS.Core
 {
@@ -58,7 +59,7 @@ namespace NRLMSIS.Core
         /// Performance tip: Reuse the same context across multiple calculations at different altitudes
         /// but the same time/location to avoid recalculating basis functions (3x faster).
         /// </remarks>
-        AtmosphericState Calculate(AtmosphericLocation location, SpaceWeather weather, NRLMSIS.Context context);
+        AtmosphericState Calculate(AtmosphericLocation location, SpaceWeather weather, Context context);
 
         /// <summary>
         /// Calculate atmospheric parameters at multiple locations.

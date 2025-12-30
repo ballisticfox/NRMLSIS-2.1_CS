@@ -6,6 +6,7 @@
 // USING OR MODIFYING THIS SOFTWARE, YOU ARE AGREEING TO THE TERMS AND
 // CONDITIONS OF THE LICENSE.
 // #######################################################################
+using NRLMSIS.Infrastructure;
 
 namespace NRLMSIS.Calculators
 {

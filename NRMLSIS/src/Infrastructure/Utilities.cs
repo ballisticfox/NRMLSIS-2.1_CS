@@ -22,7 +22,7 @@
 
 using System;
 
-namespace NRLMSIS
+namespace NRLMSIS.Infrastructure
 {
     /// <summary>
     /// Utility functions for NRLMSIS 2.1

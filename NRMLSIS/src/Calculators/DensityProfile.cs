@@ -22,6 +22,7 @@
 // **************************************************************************************************
 
 using System;
+using NRLMSIS.Infrastructure;
 
 namespace NRLMSIS.Calculators
 {

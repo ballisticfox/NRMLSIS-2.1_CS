@@ -8,6 +8,7 @@
 // #######################################################################
 
 using System;
+using NRLMSIS.Infrastructure;
 
 namespace NRLMSIS.Core
 {
@@ -124,7 +125,7 @@ namespace NRLMSIS.Core
         /// <param name="density">Density value to check</param>
         /// <returns>True if the value represents missing data, false otherwise</returns>
         public static bool IsMissing(double density) =>
-            Math.Abs(density - NRLMSIS.Constants.DMissing) < 1e-40;
+            Math.Abs(density - Constants.DMissing) < 1e-40;
 
         /// <summary>
         /// Returns a string representation of the densities.

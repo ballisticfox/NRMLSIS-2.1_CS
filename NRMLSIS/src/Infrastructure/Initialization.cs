@@ -89,7 +89,7 @@ using System;
 using System.IO;
 using System.Linq;
 
-namespace NRLMSIS
+namespace NRLMSIS.Infrastructure
 {
     /// <summary>
     /// Parameter subset structure for MSIS model
