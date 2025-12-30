@@ -12,310 +12,467 @@
 // Neutral atmosphere empirical model from the surface to lower exosphere
 // ===========================================================================
 //
-// MSISCALC: Interface with re-ordered input arguments and output arrays.
+// REFACTORED MSISCALC: Improved version with thread-safety, validation, and readability
 //
-//     PREREQUISITES:
-//       Must first run MsisInit.MsisInitialize to load parameters and set switches. The 
-//       MsisCalc method checks for initialization and does a default
-//       initialization if necessary. This self-initialization will be removed
-//       in future versions.
-//
-//     CALLING SEQUENCE:
-//       MsisCalc.Calculate(day, utsec, z, lat, lon, sfluxavg, sflux, ap, out tn, out dn, out tex);
-//  
-//     INPUT VARIABLES:
-//       day       Day of year (1.0 to 365.0 or 366.0)
-//       utsec     Universal time (seconds)
-//       z         Geodetic altitude (km) (default) or Geopotential height (km)
-//       lat       Geodetic latitude (deg)
-//       lon       Geodetic longitude (deg)
-//       sfluxavg  81 day average, centered on input time, of F10.7 solar
-//                 activity index
-//       sflux     Daily F10.7 for previous day
-//       ap        Geomagnetic activity index array [0:6] (7 elements):
-//                   [0] Daily Ap
-//                   [1] 3 hr ap index for current time
-//                   [2] 3 hr ap index for 3 hrs before current time
-//                   [3] 3 hr ap index for 6 hrs before current time
-//                   [4] 3 hr ap index for 9 hrs before current time
-//                   [5] Average of eight 3 hr ap indices from 12 to 33 hrs
-//                       prior to current time
-//                   [6] Average of eight 3 hr ap indices from 36 to 57 hrs
-//                       prior to current time
-//                 ap[1:6] are only used when switch_legacy[8] = -1.0 in MsisInitialize
-//
-//     NOTES ON INPUT VARIABLES: 
-//       - The day-of-year dependence of the model only uses the day argument. If
-//         a continuous day-of-year dependence is desired, this argument should
-//         include the fractional day (e.g., day = <day of year> + utsec/86400.0)
-//       - If lZAltType = true (default) in the MsisInitialize call, then z is
-//         treated as geodetic altitude.
-//         If lZAltType = false, then z is treated as geopotential height.
-//       - F107 and F107A values are the 10.7 cm radio flux at the Sun-Earth
-//         distance, not the radio flux at 1 AU. 
-//
-//     OUTPUT VARIABLES:
-//       tn     Temperature at altitude (K)
-//       dn[0]  Total mass density (kg/m3)
-//       dn[1]  N2 number density (m-3)
-//       dn[2]  O2 number density (m-3)
-//       dn[3]  O number density (m-3)
-//       dn[4]  He number density (m-3)
-//       dn[5]  H number density (m-3)
-//       dn[6]  Ar number density (m-3)
-//       dn[7]  N number density (m-3)
-//       dn[8]  Anomalous oxygen number density (m-3)
-//       dn[9]  NO number density (m-3)
-//       tex    Exospheric temperature (K) (optional output)
-//
-//     NOTES ON OUTPUT VARIABLES: 
-//       - Missing density values are returned as 9.999e-38
-//       - Species included in mass density calculation are set in MsisInitialize
+// Key improvements over original:
+// - Thread-safe: Uses MsisContext instead of static state
+// - Input validation: Clear error messages for invalid inputs
+// - Readable: Helper methods and named constants instead of magic numbers
+// - Maintainable: Separated concerns and better documentation
 //
 // ===========================================================================
 
 using System;
-using System.Linq;
 
 namespace NRLMSIS
 {
     /// <summary>
-    /// Main MSIS calculation entry point
+    /// Main MSIS calculation entry point with improved thread-safety and validation.
+    /// This is a refactored version of the original MsisCalc that uses context objects
+    /// for thread-safe caching and provides better error handling.
     /// </summary>
     public static class MsisCalc
     {
-        private static double lastDay = -9999.0;
-        private static double lastUtsec = -9999.0;
-        private static double lastLat = -9999.0;
-        private static double lastLon = -9999.0;
-        private static double lastZ = -9999.0;
-        private static double lastSflux = -9999.0;
-        private static double lastSfluxavg = -9999.0;
-        private static double[] lastAp = Enumerable.Repeat(-9999.0, 7).ToArray();
-        private static double[] gf = new double[MsisConstants.MaxNbf];
-        private static double[,] Sz = new double[6, 5]; // [-5:0, 2:6] -> [0:5, 0:4]
-        private static int iz;
-        private static TnParm tpro = new TnParm();
-        private static DnParm[] dpro = Enumerable.Range(0, MsisConstants.NSpec)
-                                                   .Select(_ => new DnParm())
-                                                   .ToArray();
-
         // ==================================================================================================
-        // MSISCALC: The main MSIS subroutine entry point
+        // CALCULATE: Main calculation method with context for thread-safety
         // ==================================================================================================
         /// <summary>
-        /// Calculate MSIS atmospheric parameters
+        /// Calculate MSIS atmospheric parameters using a provided context for caching.
+        /// This overload is thread-safe and recommended for multi-threaded applications.
         /// </summary>
-        /// <param name="day">Day of year (1.0 to 365.0 or 366.0)</param>
-        /// <param name="utsec">Universal time (seconds)</param>
-        /// <param name="z">Geodetic altitude (km) or geopotential height (km)</param>
-        /// <param name="lat">Geodetic latitude (degrees)</param>
-        /// <param name="lon">Geodetic longitude (degrees)</param>
-        /// <param name="sfluxavg">81-day average F10.7</param>
-        /// <param name="sflux">Daily F10.7</param>
-        /// <param name="ap">Geomagnetic activity index array [0:6]</param>
+        /// <param name="day">Day of year (1.0 to 366.0, fractional days allowed)</param>
+        /// <param name="utsec">Universal time in seconds (0 to 86400)</param>
+        /// <param name="z">Altitude in km (geodetic or geopotential based on initialization)</param>
+        /// <param name="lat">Geodetic latitude in degrees (-90 to 90)</param>
+        /// <param name="lon">Geodetic longitude in degrees (-180 to 360)</param>
+        /// <param name="sfluxavg">81-day average F10.7 solar flux</param>
+        /// <param name="sflux">Daily F10.7 solar flux for previous day</param>
+        /// <param name="ap">Geomagnetic activity index array [0:6] (7 elements)</param>
+        /// <param name="context">Computation context for caching (create one per thread)</param>
         /// <param name="tn">Output: Temperature at altitude (K)</param>
-        /// <param name="dn">Output: Density array [0:9] - see documentation for details</param>
+        /// <param name="dn">Output: Density array [0:9] in SI units (see remarks)</param>
         /// <param name="tex">Output: Exospheric temperature (K)</param>
-        public static void Calculate(double day, double utsec, double z, double lat, double lon,
-                                    double sfluxavg, double sflux, double[] ap,
-                                    out double tn, out double[] dn, out double tex)
+        /// <remarks>
+        /// Output density array (dn):
+        ///   [0] Total mass density (kg/m³)
+        ///   [1] N2 number density (m⁻³)
+        ///   [2] O2 number density (m⁻³)
+        ///   [3] O number density (m⁻³)
+        ///   [4] He number density (m⁻³)
+        ///   [5] H number density (m⁻³)
+        ///   [6] Ar number density (m⁻³)
+        ///   [7] N number density (m⁻³)
+        ///   [8] Anomalous O number density (m⁻³)
+        ///   [9] NO number density (m⁻³)
+        ///
+        /// Missing values are returned as 9.999e-38.
+        /// Species calculated are determined by MsisInit configuration.
+        /// </remarks>
+        /// <exception cref="ArgumentOutOfRangeException">
+        /// Thrown when any input parameter is outside valid range.
+        /// </exception>
+        /// <exception cref="ArgumentException">
+        /// Thrown when ap array has incorrect length.
+        /// </exception>
+        /// <exception cref="InvalidOperationException">
+        /// Thrown when MSIS has not been initialized.
+        /// </exception>
+        public static void Calculate(
+            double day, double utsec, double z, double lat, double lon,
+            double sfluxavg, double sflux, double[] ap,
+            MsisContext context,
+            out double tn, out double[] dn, out double tex)
         {
-            // Check if model has been initialized; if not, perform default initialization
-            if (!MsisInit.InitFlag)
-            {
-                MsisInit.MsisInitialize();
-            }
+            // Validate initialization
+            InputValidator.ValidateInitialization();
 
-            // Initialize output arrays
+            // Validate all input parameters
+            InputValidator.ValidateInputs(day, utsec, z, lat, lon, sfluxavg, sflux, ap);
+
+            // Initialize output
             dn = new double[10];
             tex = 0.0;
+            tn = 0.0;
 
-            double zeta;
-            double lndtotz = 0.0;
-            double Vz = 0.0;
-            double Wz = 0.0;
-            double HRfact;
-            double lnPz;
-            double delz;
-            int i, j, kmax;
+            // Convert altitude to geopotential height if needed
+            double geopotentialHeight = MsisInit.ZAltFlag
+                ? MsisUtils.Alt2Gph(lat, z)
+                : z;
 
-            // Calculate geopotential height, if necessary
-            if (MsisInit.ZAltFlag)
+            // Check if we need to recalculate basis functions
+            // (they depend on location, time, and space weather)
+            bool needsProfileUpdate = context.IsLocationTimeChanged(
+                day, utsec, lat, lon, sflux, sfluxavg, ap);
+
+            if (needsProfileUpdate)
             {
-                zeta = MsisUtils.Alt2Gph(lat, z);
-            }
-            else
-            {
-                zeta = z;
-            }
+                // Calculate horizontal and temporal basis functions
+                MsisGfn.Globe(day, utsec, lat, lon, sfluxavg, sflux, ap,
+                            out double[] gf);
 
-            // If only altitude changes then update the local spline weights
-            if (zeta < MsisConstants.ZetaB)
-            {
-                if (zeta != lastZ)
-                {
-                    if (zeta < MsisConstants.ZetaF)
-                    {
-                        kmax = 5;
-                    }
-                    else
-                    {
-                        kmax = 6;
-                    }
-                    MsisUtils.BSpline(zeta, MsisConstants.NodesTN, MsisConstants.Nd + 2, kmax, 
-                                     MsisInit.EtaTN, out Sz, out iz);
-                    lastZ = zeta;
-                }
-            }
+                // Copy to context cache
+                Array.Copy(gf, context.BasisFunctions, gf.Length);
 
-            // If location, time, or solar/geomagnetic conditions change then recompute the profile parameters
-            bool needsUpdate = (day != lastDay) || (utsec != lastUtsec) ||
-                             (lat != lastLat) || (lon != lastLon) ||
-                             (sflux != lastSflux) || (sfluxavg != lastSfluxavg) ||
-                             !ap.SequenceEqual(lastAp);
+                // Calculate temperature profile parameters
+                MsisTfn.TfnParm(context.BasisFunctions, out var tpro);
 
-            if (needsUpdate)
-            {
-                MsisGfn.Globe(day, utsec, lat, lon, sfluxavg, sflux, ap, out gf);
-                MsisTfn.TfnParm(gf, out tpro);
-                // ispec ranges 2 to 10 (N2 through NO)
-                // SpecFlag[ispec-1] checks if species ispec should be calculated
-                // SpecFlag[1] checks species 2 (N2), SpecFlag[9] checks species 10 (NO)
-                // dpro[2] = N2, dpro[3] = O2, ..., dpro[10] = NO
+                // Copy temperature profile to context
+                CopyTemperatureProfile(tpro, context.TemperatureProfile);
+
+                // Calculate density profile parameters for each species
                 for (int ispec = 2; ispec <= 10; ispec++)
                 {
                     if (MsisInit.SpecFlag[ispec - 1])
                     {
-                        MsisDfn.DfnParm(ispec, gf, tpro, out dpro[ispec]);
+                        MsisDfn.DfnParm(ispec, context.BasisFunctions,
+                                       context.TemperatureProfile,
+                                       out var dpro);
+                        CopyDensityProfile(dpro, context.DensityProfiles[ispec]);
                     }
                 }
-                lastDay = day;
-                lastUtsec = utsec;
-                lastLat = lat;
-                lastLon = lon;
-                lastSflux = sflux;
-                lastSfluxavg = sfluxavg;
-                lastAp = (double[])ap.Clone();
+
+                // Update cache markers
+                context.UpdateLocationTimeCache(day, utsec, lat, lon, sflux, sfluxavg, ap);
             }
 
-            // Exospheric temperature
-            tex = tpro.Tex;
+            // Check if we need to recalculate spline weights
+            // (they only depend on altitude)
+            if (geopotentialHeight < AltitudeRegimes.ZetaB)
+            {
+                bool needsSplineUpdate = context.IsAltitudeChanged(geopotentialHeight);
 
-            // Temperature at altitude
-            // Fortran Sz(-3:0, 4) maps to C# Sz[2:5, 2]
-            double[] wght = new double[4];
+                if (needsSplineUpdate)
+                {
+                    // Determine maximum spline order needed
+                    int maxOrder = geopotentialHeight < AltitudeRegimes.ZetaF ? 5 : 6;
+
+                    // Calculate B-spline weights
+                    MsisUtils.BSpline(
+                        geopotentialHeight,
+                        MsisConstants.NodesTN,
+                        MsisConstants.Nd + 2,
+                        maxOrder,
+                        MsisInit.EtaTN,
+                        out double[,] splineWeights,
+                        out int splineIndex);
+
+                    // Copy to context cache
+                    Array.Copy(splineWeights, context.SplineWeights, splineWeights.Length);
+                    context.SplineIndex = splineIndex;
+
+                    // Update altitude cache marker
+                    context.UpdateAltitudeCache(geopotentialHeight);
+                }
+            }
+
+            // Calculate temperature at altitude
+            tn = CalculateTemperature(geopotentialHeight, context);
+
+            // Get exospheric temperature
+            tex = context.TemperatureProfile.Tex;
+
+            // Calculate densities for all species
+            CalculateDensities(geopotentialHeight, tn, context, dn);
+        }
+
+        // ==================================================================================================
+        // CALCULATE: Overload without context (creates temporary context)
+        // ==================================================================================================
+        /// <summary>
+        /// Calculate MSIS atmospheric parameters without explicit context.
+        /// A temporary context is created for this calculation.
+        /// For multi-threaded use or repeated calculations, use the overload with MsisContext.
+        /// </summary>
+        public static void Calculate(
+            double day, double utsec, double z, double lat, double lon,
+            double sfluxavg, double sflux, double[] ap,
+            out double tn, out double[] dn, out double tex)
+        {
+            using var context = new MsisContext();
+            Calculate(day, utsec, z, lat, lon, sfluxavg, sflux, ap,
+                     context, out tn, out dn, out tex);
+        }
+
+        // ==================================================================================================
+        // CALCULATE: Overload without tex output
+        // ==================================================================================================
+        /// <summary>
+        /// Calculate MSIS atmospheric parameters without exospheric temperature output.
+        /// </summary>
+        public static void Calculate(
+            double day, double utsec, double z, double lat, double lon,
+            double sfluxavg, double sflux, double[] ap,
+            MsisContext context,
+            out double tn, out double[] dn)
+        {
+            Calculate(day, utsec, z, lat, lon, sfluxavg, sflux, ap,
+                     context, out tn, out dn, out _);
+        }
+
+        // ==================================================================================================
+        // Private helper methods
+        // ==================================================================================================
+
+        /// <summary>
+        /// Calculates temperature at the specified altitude using cached profile parameters.
+        /// </summary>
+        private static double CalculateTemperature(double altitude, MsisContext context)
+        {
+            // Extract spline weights for temperature calculation (order 4 = cubic)
+            // Fortran: Sz(-3:0, 4) maps to C# Sz[2:5, 2]
+            Span<double> wght = context.WeightBuffer;
             for (int idx = 0; idx < 4; idx++)
             {
-                wght[idx] = Sz[idx + 2, 2];
+                wght[idx] = context.SplineWeights[idx + 2, 2]; // Order 4 -> index 2
             }
-            tn = MsisTfn.TfnX(zeta, iz, wght, tpro);
 
-            // Temperature integration terms at altitude, total number density
-            delz = zeta - MsisConstants.ZetaB;
-            if (zeta < MsisConstants.ZetaF)
+            // Calculate temperature at altitude
+            return MsisTfn.TfnX(altitude, context.SplineIndex, wght.ToArray(),
+                               context.TemperatureProfile);
+        }
+
+        /// <summary>
+        /// Calculates densities for all enabled species at the specified altitude.
+        /// </summary>
+        private static void CalculateDensities(
+            double altitude,
+            double temperature,
+            MsisContext context,
+            double[] densities)
+        {
+            var tpro = context.TemperatureProfile;
+
+            // Calculate temperature integration terms
+            double delz = altitude - AltitudeRegimes.ZetaB;
+            double lndtotz, Vz, Wz;
+
+            if (altitude < AltitudeRegimes.ZetaF)
             {
-                // Below zetaF (70 km)
-                i = Math.Max(iz - 4, 0);
-                if (iz < 4)
-                {
-                    j = -iz;
-                }
-                else
-                {
-                    j = -4;
-                }
-                // Fortran: dot_product(tpro%beta(i:iz), Sz(j:0,5))
-                // Sz(j:0,5) where j ranges from -4 to 0, order 5
-                // In C#: Sz[j+5 to 5, 3] (since order 5 -> index 3, and j+5 maps -4->1, 0->5)
-                Vz = 0.0;
-                int szIdx = j + 5;
-                for (int idx = i; idx <= iz; idx++)
-                {
-                    Vz += tpro.Beta[idx] * Sz[szIdx, 3];
-                    szIdx++;
-                }
-                Vz += tpro.CVs;
-                Wz = 0.0;
-                lnPz = MsisConstants.LnP0 - MsisConstants.MbarG0DivKB * (Vz - tpro.VZeta0);
-                lndtotz = lnPz - Math.Log(MsisConstants.KB * tn);
+                // Below fully mixed region (< 70 km)
+                CalculateIntegralsLowAltitude(altitude, temperature, context,
+                                             out lndtotz, out Vz, out Wz);
+            }
+            else if (altitude < AltitudeRegimes.ZetaB)
+            {
+                // Transition region (70-122.5 km)
+                CalculateIntegralsMidAltitude(altitude, temperature, context,
+                                             out lndtotz, out Vz, out Wz);
             }
             else
             {
-                // Above zetaF (70 km)
-                if (zeta < MsisConstants.ZetaB)
-                {
-                    // Fortran: dot_product(tpro%beta(iz-4:iz), Sz(-4:0,5))
-                    // Sz(-4:0,5) maps to Sz[1:5, 3]
-                    Vz = 0.0;
-                    for (int idx = 0; idx <= 4; idx++)
-                    {
-                        Vz += tpro.Beta[iz - 4 + idx] * Sz[idx + 1, 3];
-                    }
-                    Vz += tpro.CVs;
-
-                    // Fortran: dot_product(tpro%gamma(iz-5:iz), Sz(-5:0,6))
-                    // Sz(-5:0,6) maps to Sz[0:5, 4]
-                    Wz = 0.0;
-                    for (int idx = 0; idx <= 5; idx++)
-                    {
-                        Wz += tpro.Gamma[iz - 5 + idx] * Sz[idx, 4];
-                    }
-                    Wz += tpro.CVs * delz + tpro.CWs;
-                }
-                else
-                {
-                    // Above zetaB (>122.5 km) - Bates profile region
-                    Vz = (delz + Math.Log(tn / tpro.Tex) / tpro.Sigma) / tpro.Tex + tpro.CVb;
-                    Wz = (0.5 * delz * delz + MsisUtils.Dilog(tpro.B * Math.Exp(-tpro.Sigma * delz)) / tpro.SigmaSq) / tpro.Tex
-                       + tpro.CVb * delz + tpro.CWb;
-                }
+                // Upper thermosphere (> 122.5 km) - Bates profile
+                CalculateIntegralsHighAltitude(altitude, temperature, delz, tpro,
+                                              out lndtotz, out Vz, out Wz);
             }
 
-            // Species number densities at altitude
-            // Fortran: ispec ranges 2 to nspec-1 (which is 2 to 10)
-            // C#: ispec ranges 2 to 10
-            //     dn[1] = N2 (ispec=2), dn[2] = O2 (ispec=3), ..., dn[9] = NO (ispec=10)
-            //     dpro[2] = N2, dpro[3] = O2, ..., dpro[10] = NO
-            //     SpecFlag[1] = N2, SpecFlag[2] = O2, ..., SpecFlag[9] = NO
-            HRfact = 0.5 * (1.0 + Math.Tanh(MsisConstants.HGamma * (zeta - MsisConstants.ZetaGamma)));
+            // Calculate chemical/dynamical taper factor
+            double taperFactor = 0.5 * (1.0 + Math.Tanh(
+                AltitudeRegimes.HGamma * (altitude - AltitudeRegimes.ZetaGamma)));
+
+            // Calculate number densities for each species (2-10)
             for (int ispec = 2; ispec <= 10; ispec++)
             {
                 if (MsisInit.SpecFlag[ispec - 1])
                 {
-                    dn[ispec - 1] = MsisDfn.DfnX(zeta, tn, lndtotz, Vz, Wz, HRfact, tpro, dpro[ispec]);
+                    densities[ispec - 1] = MsisDfn.DfnX(
+                        altitude, temperature, lndtotz, Vz, Wz, taperFactor,
+                        tpro, context.DensityProfiles[ispec]);
                 }
                 else
                 {
-                    dn[ispec - 1] = MsisConstants.DMissing;
+                    densities[ispec - 1] = MsisConstants.DMissing;
                 }
             }
 
-            // Mass density
-            // Fortran: dn(1) = dot_product(dn, masswgt)
-            // C#: dn[0] corresponds to Fortran's dn(1)
+            // Calculate total mass density if enabled
             if (MsisInit.SpecFlag[0])
             {
-                dn[0] = 0.0;
+                densities[0] = 0.0;
                 for (int idx = 1; idx < 10; idx++)
                 {
-                    dn[0] += dn[idx] * MsisInit.MassWgt[idx];
+                    if (densities[idx] != MsisConstants.DMissing)
+                    {
+                        densities[0] += densities[idx] * MsisInit.MassWgt[idx];
+                    }
                 }
             }
             else
             {
-                dn[0] = MsisConstants.DMissing;
+                densities[0] = MsisConstants.DMissing;
             }
         }
 
         /// <summary>
-        /// Calculate MSIS atmospheric parameters (overload without tex output)
+        /// Calculates integration terms for low altitude (below 70 km).
         /// </summary>
-        public static void Calculate(double day, double utsec, double z, double lat, double lon,
-                                    double sfluxavg, double sflux, double[] ap,
-                                    out double tn, out double[] dn)
+        private static void CalculateIntegralsLowAltitude(
+            double altitude,
+            double temperature,
+            MsisContext context,
+            out double lnTotalDensity,
+            out double firstIntegral,
+            out double secondIntegral)
         {
-            Calculate(day, utsec, z, lat, lon, sfluxavg, sflux, ap, out tn, out dn, out _);
+            var tpro = context.TemperatureProfile;
+            int iz = context.SplineIndex;
+
+            // Calculate first integral (V) using 5th order splines
+            int i = Math.Max(iz - 4, 0);
+            int j = iz < 4 ? -iz : -4;
+
+            firstIntegral = 0.0;
+            int szIdx = j + 5; // Map Fortran index to C#
+            for (int idx = i; idx <= iz; idx++)
+            {
+                firstIntegral += tpro.Beta[idx] * context.SplineWeights[szIdx, 3]; // Order 5 -> index 3
+                szIdx++;
+            }
+            firstIntegral += tpro.CVs;
+
+            // Second integral not needed for low altitude
+            secondIntegral = 0.0;
+
+            // Calculate log pressure and total number density
+            double lnPressure = MsisConstants.LnP0 -
+                MsisConstants.MbarG0DivKB * (firstIntegral - tpro.VZeta0);
+            lnTotalDensity = lnPressure - Math.Log(MsisConstants.KB * temperature);
+        }
+
+        /// <summary>
+        /// Calculates integration terms for mid altitude (70-122.5 km).
+        /// </summary>
+        private static void CalculateIntegralsMidAltitude(
+            double altitude,
+            double temperature,
+            MsisContext context,
+            out double lnTotalDensity,
+            out double firstIntegral,
+            out double secondIntegral)
+        {
+            var tpro = context.TemperatureProfile;
+            int iz = context.SplineIndex;
+
+            // Calculate first integral (V) using 5th order splines
+            firstIntegral = 0.0;
+            for (int idx = 0; idx <= 4; idx++)
+            {
+                firstIntegral += tpro.Beta[iz - 4 + idx] * context.SplineWeights[idx + 1, 3];
+            }
+            firstIntegral += tpro.CVs;
+
+            // Calculate second integral (W) using 6th order splines
+            secondIntegral = 0.0;
+            for (int idx = 0; idx <= 5; idx++)
+            {
+                secondIntegral += tpro.Gamma[iz - 5 + idx] * context.SplineWeights[idx, 4];
+            }
+            double delz = altitude - AltitudeRegimes.ZetaB;
+            secondIntegral += tpro.CVs * delz + tpro.CWs;
+
+            // Log total density not used in this region
+            lnTotalDensity = 0.0;
+        }
+
+        /// <summary>
+        /// Calculates integration terms for high altitude (above 122.5 km).
+        /// </summary>
+        private static void CalculateIntegralsHighAltitude(
+            double altitude,
+            double temperature,
+            double delz,
+            TnParm tpro,
+            out double lnTotalDensity,
+            out double firstIntegral,
+            out double secondIntegral)
+        {
+            // Bates profile integrals
+            firstIntegral = (delz + Math.Log(temperature / tpro.Tex) / tpro.Sigma) / tpro.Tex
+                          + tpro.CVb;
+
+            secondIntegral = (0.5 * delz * delz +
+                            MsisUtils.Dilog(tpro.B * Math.Exp(-tpro.Sigma * delz)) / tpro.SigmaSq)
+                           / tpro.Tex + tpro.CVb * delz + tpro.CWb;
+
+            // Log total density not used in this region
+            lnTotalDensity = 0.0;
+        }
+
+        /// <summary>
+        /// Deep copies temperature profile parameters.
+        /// </summary>
+        private static void CopyTemperatureProfile(TnParm source, TnParm dest)
+        {
+            Array.Copy(source.Cf, dest.Cf, source.Cf.Length);
+            Array.Copy(source.Beta, dest.Beta, source.Beta.Length);
+            Array.Copy(source.Gamma, dest.Gamma, source.Gamma.Length);
+
+            dest.TZetaF = source.TZetaF;
+            dest.TZetaA = source.TZetaA;
+            dest.DlnTdzA = source.DlnTdzA;
+            dest.LnDTotF = source.LnDTotF;
+            dest.Tex = source.Tex;
+            dest.Tgb0 = source.Tgb0;
+            dest.Tb0 = source.Tb0;
+            dest.Sigma = source.Sigma;
+            dest.SigmaSq = source.SigmaSq;
+            dest.B = source.B;
+            dest.CVs = source.CVs;
+            dest.CVb = source.CVb;
+            dest.CWs = source.CWs;
+            dest.CWb = source.CWb;
+            dest.VZetaF = source.VZetaF;
+            dest.VZetaA = source.VZetaA;
+            dest.WZetaA = source.WZetaA;
+            dest.VZeta0 = source.VZeta0;
+        }
+
+        /// <summary>
+        /// Deep copies density profile parameters.
+        /// </summary>
+        private static void CopyDensityProfile(DnParm source, DnParm dest)
+        {
+            if (source.Cf != null && dest.Cf != null)
+            {
+                Array.Copy(source.Cf, dest.Cf, Math.Min(source.Cf.Length, dest.Cf.Length));
+            }
+            if (source.Mi != null && dest.Mi != null)
+            {
+                Array.Copy(source.Mi, dest.Mi, source.Mi.Length);
+            }
+            if (source.ZetaMi != null && dest.ZetaMi != null)
+            {
+                Array.Copy(source.ZetaMi, dest.ZetaMi, source.ZetaMi.Length);
+            }
+            if (source.AMi != null && dest.AMi != null)
+            {
+                Array.Copy(source.AMi, dest.AMi, source.AMi.Length);
+            }
+            if (source.WMi != null && dest.WMi != null)
+            {
+                Array.Copy(source.WMi, dest.WMi, source.WMi.Length);
+            }
+            if (source.XMi != null && dest.XMi != null)
+            {
+                Array.Copy(source.XMi, dest.XMi, source.XMi.Length);
+            }
+
+            dest.LnPhiF = source.LnPhiF;
+            dest.LnDRef = source.LnDRef;
+            dest.ZetaM = source.ZetaM;
+            dest.HML = source.HML;
+            dest.HMU = source.HMU;
+            dest.C = source.C;
+            dest.ZetaC = source.ZetaC;
+            dest.HC = source.HC;
+            dest.R = source.R;
+            dest.ZetaR = source.ZetaR;
+            dest.HR = source.HR;
+            dest.ZRef = source.ZRef;
+            dest.IzRef = source.IzRef;
+            dest.TRef = source.TRef;
+            dest.ZMin = source.ZMin;
+            dest.ZHyd = source.ZHyd;
+            dest.ISpec = source.ISpec;
         }
     }
 }
