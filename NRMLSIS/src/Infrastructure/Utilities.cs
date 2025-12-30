@@ -22,12 +22,12 @@
 
 using System;
 
-namespace NRLMSIS
+namespace NRLMSIS.Infrastructure
 {
     /// <summary>
     /// Utility functions for NRLMSIS 2.1
     /// </summary>
-    public static class MsisUtils
+    public static class Utilities
     {
         // ==================================================================================================
         // ALT2GPH: Altitude to Geopotential Height
@@ -36,9 +36,9 @@ namespace NRLMSIS
         //     http://earth-info.nga.mil/GandG/publications/historic/historic.html
         //   Featherstone, W. E., and S. J. Claessens (2008), Closed-form transformation between
         //     geodetic and ellipsoidal coordinates, Studia Geophysica et Geodaetica, 52, 1-18
-        //   Jekeli, C. (2009), Potential theory and static gravity field of the Earth, in 
+        //   Jekeli, C. (2009), Potential theory and static gravity field of the Earth, in
         //     Treatise on Geophysics, ed. T. Herring, vol 3, 11-42
-        //   NIMA Technical Report TR8350.2 (2000, 3rd edition, Amendment1), 
+        //   NIMA Technical Report TR8350.2 (2000, 3rd edition, Amendment1),
         //     http://earth-info.nga.mil/GandG/publications/tr8350.2/tr8350_2.html
         // ==================================================================================================
         /// <summary>
@@ -153,7 +153,7 @@ namespace NRLMSIS
         /// <param name="eta">Precomputed weights for recursion (reciprocals of node differences) [0:30, 2:6]</param>
         /// <param name="S">Output: b-spline values [spline index relative to i (-5:0), spline order (2:6)]</param>
         /// <param name="i">Output: Index of last nonzero b-spline</param>
-        public static void BSpline(double x, double[] nodes, int nd, int kmax, 
+        public static void BSpline(double x, double[] nodes, int nd, int kmax,
                                    double[,] eta, out double[,] S, out int i)
         {
             // Initialize output array S[-5:0, 2:6]
@@ -256,8 +256,8 @@ namespace NRLMSIS
         // ==================================================================================================
         // DILOG: Calculate dilogarithm in the domain [0,1)
         // Retains terms up to order 3 in the expansion, which results in relative errors less than 1E-5.
-        // Reference: 
-        //   Ginsberg, E. S., and D. Zaborowski (1975), The Dilogarithm function of a real argument, 
+        // Reference:
+        //   Ginsberg, E. S., and D. Zaborowski (1975), The Dilogarithm function of a real argument,
         //   Commun. ACM, 18, 200–202.
         // ==================================================================================================
         /// <summary>
@@ -267,7 +267,7 @@ namespace NRLMSIS
         /// <returns>Dilogarithm value</returns>
         public static double Dilog(double x0)
         {
-            double pi2_6 = MsisConstants.Pi * MsisConstants.Pi / 6.0;
+            double pi2_6 = Constants.Pi * Constants.Pi / 6.0;
 
             double x = x0;
             double dilog;

@@ -18,16 +18,17 @@
 // **************************************************************************************************
 
 using System;
+using NRLMSIS.Infrastructure;
 
-namespace NRLMSIS
+namespace NRLMSIS.Calculators
 {
     /// <summary>
     /// Global basis functions for NRLMSIS 2.1
     /// </summary>
-    public static class MsisGfn
+    public static class BasisFunctions
     {
         // Module-level variables for caching
-        private static double[,] plg = new double[MsisConstants.MaxN + 1, MsisConstants.MaxN + 1]; // [0:maxn, 0:maxn]
+        private static double[,] plg = new double[Constants.MaxN + 1, Constants.MaxN + 1]; // [0:maxn, 0:maxn]
         private static double[] cdoy = new double[2]; // [0:1] for indices 1-2 in Fortran
         private static double[] sdoy = new double[2]; // [0:1] for indices 1-2 in Fortran
         private static double[] clst = new double[3]; // [0:2] for indices 1-3 in Fortran
@@ -59,7 +60,7 @@ namespace NRLMSIS
         public static void Globe(double doy, double utsec, double lat, double lon,
                                 double sfluxavg, double sflux, double[] ap, out double[] bf)
         {
-            bf = new double[MsisConstants.MaxNbf];
+            bf = new double[Constants.MaxNbf];
 
             double lst;
             double slat, clat, clat2, clat4, slat2;
@@ -74,8 +75,8 @@ namespace NRLMSIS
             // Associated Legendre polynomials
             if (lat != lastLat)
             {
-                clat = Math.Sin(lat * MsisConstants.Deg2Rad);  // clat <=> sin, Legendre polynomial defined in colat
-                slat = Math.Cos(lat * MsisConstants.Deg2Rad);  // slat <=> cos, Legendre polynomial defined in colat
+                clat = Math.Sin(lat * Constants.Deg2Rad);  // clat <=> sin, Legendre polynomial defined in colat
+                slat = Math.Cos(lat * Constants.Deg2Rad);  // slat <=> cos, Legendre polynomial defined in colat
                 clat2 = clat * clat;
                 clat4 = clat2 * clat2;
                 slat2 = slat * slat;
@@ -112,10 +113,10 @@ namespace NRLMSIS
             // Fourier harmonics of day of year
             if (doy != lastDoy)
             {
-                cdoy[0] = Math.Cos(MsisConstants.Doy2Rad * doy);
-                sdoy[0] = Math.Sin(MsisConstants.Doy2Rad * doy);
-                cdoy[1] = Math.Cos(MsisConstants.Doy2Rad * doy * 2.0);
-                sdoy[1] = Math.Sin(MsisConstants.Doy2Rad * doy * 2.0);
+                cdoy[0] = Math.Cos(Constants.Doy2Rad * doy);
+                sdoy[0] = Math.Sin(Constants.Doy2Rad * doy);
+                cdoy[1] = Math.Cos(Constants.Doy2Rad * doy * 2.0);
+                sdoy[1] = Math.Sin(Constants.Doy2Rad * doy * 2.0);
                 lastDoy = doy;
             }
 
@@ -124,22 +125,22 @@ namespace NRLMSIS
             if (lst < 0) lst += 24.0;
             if (lst != lastLst)
             {
-                clst[0] = Math.Cos(MsisConstants.Lst2Rad * lst);
-                slst[0] = Math.Sin(MsisConstants.Lst2Rad * lst);
-                clst[1] = Math.Cos(MsisConstants.Lst2Rad * lst * 2.0);
-                slst[1] = Math.Sin(MsisConstants.Lst2Rad * lst * 2.0);
-                clst[2] = Math.Cos(MsisConstants.Lst2Rad * lst * 3.0);
-                slst[2] = Math.Sin(MsisConstants.Lst2Rad * lst * 3.0);
+                clst[0] = Math.Cos(Constants.Lst2Rad * lst);
+                slst[0] = Math.Sin(Constants.Lst2Rad * lst);
+                clst[1] = Math.Cos(Constants.Lst2Rad * lst * 2.0);
+                slst[1] = Math.Sin(Constants.Lst2Rad * lst * 2.0);
+                clst[2] = Math.Cos(Constants.Lst2Rad * lst * 3.0);
+                slst[2] = Math.Sin(Constants.Lst2Rad * lst * 3.0);
                 lastLst = lst;
             }
 
             // Fourier harmonics of longitude
             if (lon != lastLon)
             {
-                clon[0] = Math.Cos(MsisConstants.Deg2Rad * lon);
-                slon[0] = Math.Sin(MsisConstants.Deg2Rad * lon);
-                clon[1] = Math.Cos(MsisConstants.Deg2Rad * lon * 2.0);
-                slon[1] = Math.Sin(MsisConstants.Deg2Rad * lon * 2.0);
+                clon[0] = Math.Cos(Constants.Deg2Rad * lon);
+                slon[0] = Math.Sin(Constants.Deg2Rad * lon);
+                clon[1] = Math.Cos(Constants.Deg2Rad * lon * 2.0);
+                slon[1] = Math.Sin(Constants.Deg2Rad * lon * 2.0);
                 lastLon = lon;
             }
 
@@ -151,20 +152,20 @@ namespace NRLMSIS
             Array.Clear(bf, 0, bf.Length);
 
             // Time-independent (pure latitude dependence)
-            c = MsisConstants.CTimeInd;
-            for (int n = 0; n <= MsisConstants.AMaxN; n++)
+            c = Constants.CTimeInd;
+            for (int n = 0; n <= Constants.AMaxN; n++)
             {
                 bf[c] = plg[n, 0];
                 c++;
             }
 
             // Intra-annual (annual and semiannual)
-            if (c != MsisConstants.CIntAnn) throw new InvalidOperationException("Problem with basis definitions");
-            for (int s = 1; s <= MsisConstants.AMaxS; s++)
+            if (c != Constants.CIntAnn) throw new InvalidOperationException("Problem with basis definitions");
+            for (int s = 1; s <= Constants.AMaxS; s++)
             {
                 cosdoy = cdoy[s - 1];
                 sindoy = sdoy[s - 1];
-                for (int n = 0; n <= MsisConstants.AMaxN; n++)
+                for (int n = 0; n <= Constants.AMaxN; n++)
                 {
                     pl = plg[n, 0];
                     bf[c] = pl * cosdoy;
@@ -174,12 +175,12 @@ namespace NRLMSIS
             }
 
             // Migrating Tides (local time dependence)
-            if (c != MsisConstants.CTide) throw new InvalidOperationException("Problem with basis definitions");
-            for (int l = 1; l <= MsisConstants.TMaxL; l++)
+            if (c != Constants.CTide) throw new InvalidOperationException("Problem with basis definitions");
+            for (int l = 1; l <= Constants.TMaxL; l++)
             {
                 coslst = clst[l - 1];
                 sinlst = slst[l - 1];
-                for (int n = l; n <= MsisConstants.TMaxN; n++)
+                for (int n = l; n <= Constants.TMaxN; n++)
                 {
                     pl = plg[n, l];
                     bf[c] = pl * coslst;
@@ -187,11 +188,11 @@ namespace NRLMSIS
                     c += 2;
                 }
                 // Intra-annual modulation of tides
-                for (int s = 1; s <= MsisConstants.TMaxS; s++)
+                for (int s = 1; s <= Constants.TMaxS; s++)
                 {
                     cosdoy = cdoy[s - 1];
                     sindoy = sdoy[s - 1];
-                    for (int n = l; n <= MsisConstants.TMaxN; n++)
+                    for (int n = l; n <= Constants.TMaxN; n++)
                     {
                         pl = plg[n, l];
                         bf[c] = pl * coslst * cosdoy;
@@ -204,12 +205,12 @@ namespace NRLMSIS
             }
 
             // Stationary Planetary Waves (longitude dependence)
-            if (c != MsisConstants.CSpw) throw new InvalidOperationException("Problem with basis definitions");
-            for (int m = 1; m <= MsisConstants.PMaxM; m++)
+            if (c != Constants.CSpw) throw new InvalidOperationException("Problem with basis definitions");
+            for (int m = 1; m <= Constants.PMaxM; m++)
             {
                 coslon = clon[m - 1];
                 sinlon = slon[m - 1];
-                for (int n = m; n <= MsisConstants.PMaxN; n++)
+                for (int n = m; n <= Constants.PMaxN; n++)
                 {
                     pl = plg[n, m];
                     bf[c] = pl * coslon;
@@ -217,11 +218,11 @@ namespace NRLMSIS
                     c += 2;
                 }
                 // Intra-annual modulation of SPWs
-                for (int s = 1; s <= MsisConstants.PMaxS; s++)
+                for (int s = 1; s <= Constants.PMaxS; s++)
                 {
                     cosdoy = cdoy[s - 1];
                     sindoy = sdoy[s - 1];
-                    for (int n = m; n <= MsisConstants.PMaxN; n++)
+                    for (int n = m; n <= Constants.PMaxN; n++)
                     {
                         pl = plg[n, m];
                         bf[c] = pl * coslon * cosdoy;
@@ -234,7 +235,7 @@ namespace NRLMSIS
             }
 
             // Linear solar flux terms
-            if (c != MsisConstants.CSfx) throw new InvalidOperationException("Problem with basis definitions");
+            if (c != Constants.CSfx) throw new InvalidOperationException("Problem with basis definitions");
             dfa = sfluxavg - sfluxAvgRef;
             df = sflux - sfluxavg;
             bf[c] = dfa;
@@ -242,10 +243,10 @@ namespace NRLMSIS
             bf[c + 2] = df;
             bf[c + 3] = df * df;
             bf[c + 4] = df * dfa;
-            c += MsisConstants.NSfx;
+            c += Constants.NSfx;
 
             // Additional linear terms
-            if (c != MsisConstants.CExtra) throw new InvalidOperationException("Problem with basis definitions");
+            if (c != Constants.CExtra) throw new InvalidOperationException("Problem with basis definitions");
             sza = SolZen(doy, lst, lat, lon);
             bf[c] = -0.5 * Math.Tanh((sza - 98.0) / 6.0);      // Solar zenith angle logistic function for O, H
             bf[c + 1] = -0.5 * Math.Tanh((sza - 101.5) / 20.0); // Solar zenith angle logistic function for NO
@@ -275,32 +276,32 @@ namespace NRLMSIS
             // Nonlinear Terms
             //---------------------------------------------
 
-            c = MsisConstants.CNonLin;
+            c = Constants.CNonLin;
 
             // Solar flux modulation terms
-            if (c != MsisConstants.CSfxMod) throw new InvalidOperationException("Problem with basis definitions");
+            if (c != Constants.CSfxMod) throw new InvalidOperationException("Problem with basis definitions");
             bf[c] = dfa;
             bf[c + 1] = dfa * dfa;
             bf[c + 2] = df;
             bf[c + 3] = df * df;
             bf[c + 4] = df * dfa;
-            c += MsisConstants.NSfxMod;
+            c += Constants.NSfxMod;
 
             // Terms needed for legacy geomagnetic activity dependence
-            if (c != MsisConstants.CMag) throw new InvalidOperationException("Problem with basis set");
+            if (c != Constants.CMag) throw new InvalidOperationException("Problem with basis set");
             for (int i = 0; i < 7; i++)
             {
                 bf[c + i] = ap[i] - 4.0; // ap array is 1-based in Fortran, 0-based here
             }
-            bf[c + 8] = MsisConstants.Doy2Rad * doy;
-            bf[c + 9] = MsisConstants.Lst2Rad * lst;
-            bf[c + 10] = MsisConstants.Deg2Rad * lon;
-            bf[c + 11] = MsisConstants.Lst2Rad * utsec / 3600.0;
+            bf[c + 8] = Constants.Doy2Rad * doy;
+            bf[c + 9] = Constants.Lst2Rad * lst;
+            bf[c + 10] = Constants.Deg2Rad * lon;
+            bf[c + 11] = Constants.Lst2Rad * utsec / 3600.0;
             bf[c + 12] = Math.Abs(lat);
             c += 13;
             for (int m = 0; m <= 1; m++)
             {
-                for (int n = 0; n <= MsisConstants.AMaxN; n++)
+                for (int n = 0; n <= Constants.AMaxN; n++)
                 {
                     bf[c] = plg[n, m];
                     c++;
@@ -308,11 +309,11 @@ namespace NRLMSIS
             }
 
             // Terms needed for legacy UT dependence
-            c = MsisConstants.CUt;
-            bf[c] = MsisConstants.Lst2Rad * utsec / 3600.0;
-            bf[c + 1] = MsisConstants.Doy2Rad * doy;
+            c = Constants.CUt;
+            bf[c] = Constants.Lst2Rad * utsec / 3600.0;
+            bf[c + 1] = Constants.Doy2Rad * doy;
             bf[c + 2] = dfa;
-            bf[c + 3] = MsisConstants.Deg2Rad * lon;
+            bf[c + 3] = Constants.Deg2Rad * lon;
             bf[c + 4] = plg[1, 0];
             bf[c + 5] = plg[3, 0];
             bf[c + 6] = plg[5, 0];
@@ -322,9 +323,9 @@ namespace NRLMSIS
             //---------------------------------------------
             // Apply Switches
             //---------------------------------------------
-            for (int i = 0; i <= MsisConstants.Mbf; i++)
+            for (int i = 0; i <= Constants.Mbf; i++)
             {
-                if (!MsisInit.Swg[i]) bf[i] = 0.0;
+                if (!Initialization.Swg[i]) bf[i] = 0.0;
             }
         }
 
@@ -336,8 +337,8 @@ namespace NRLMSIS
         /// </summary>
         private static double SolZen(double ddd, double lst, double lat, double lon)
         {
-            const double Humr = MsisConstants.Pi / 12.0;
-            // const double Dumr = MsisConstants.Pi / 182.5;
+            const double Humr = Constants.Pi / 12.0;
+            // const double Dumr = Constants.Pi / 182.5;
             double[] p = { 0.017203534, 0.034407068, 0.051610602, 0.068814136, 0.103221204 };
 
             double wlon = 360.0 - lon;
@@ -348,21 +349,21 @@ namespace NRLMSIS
             double dec = 23.256 * Math.Sin(p[0] * (teqnx - 82.242)) + 0.381 * Math.Sin(p[1] * (teqnx - 44.855))
                        + 0.167 * Math.Sin(p[2] * (teqnx - 23.355)) - 0.013 * Math.Sin(p[3] * (teqnx + 11.97))
                        + 0.011 * Math.Sin(p[4] * (teqnx - 10.410)) + 0.339137;
-            dec = dec * MsisConstants.Deg2Rad;
+            dec = dec * Constants.Deg2Rad;
 
             // Equation of time
             double tf = teqnx - 0.5;
             double teqt = -7.38 * Math.Sin(p[0] * (tf - 4.0)) - 9.87 * Math.Sin(p[1] * (tf + 9.0))
                         + 0.27 * Math.Sin(p[2] * (tf - 53.0)) - 0.2 * Math.Cos(p[3] * (tf - 17.0));
 
-            double phi = Humr * (lst - 12.0) + teqt * MsisConstants.Deg2Rad / 4.0;
-            double rlat = lat * MsisConstants.Deg2Rad;
+            double phi = Humr * (lst - 12.0) + teqt * Constants.Deg2Rad / 4.0;
+            double rlat = lat * Constants.Deg2Rad;
 
             // Cosine of solar zenith angle
             double cosx = Math.Sin(rlat) * Math.Sin(dec) + Math.Cos(rlat) * Math.Cos(dec) * Math.Cos(phi);
             if (Math.Abs(cosx) > 1.0) cosx = Math.Sign(cosx) * 1.0;
 
-            return Math.Acos(cosx) / MsisConstants.Deg2Rad;
+            return Math.Acos(cosx) / Constants.Deg2Rad;
         }
 
         // ==================================================================================================
@@ -376,11 +377,11 @@ namespace NRLMSIS
             double f1, f2, f3, sum;
 
             // Intra-annual modulation factor
-            if (MsisInit.Swg[MsisConstants.CSfxMod])
+            if (Initialization.Swg[Constants.CSfxMod])
             {
-                f1 = parmset.Beta[MsisConstants.CSfxMod, iz] * gf[MsisConstants.CSfxMod]
-                   + (parmset.Beta[MsisConstants.CSfx + 2, iz] * gf[MsisConstants.CSfxMod + 2]
-                    + parmset.Beta[MsisConstants.CSfx + 3, iz] * gf[MsisConstants.CSfxMod + 3]) * dffact;
+                f1 = parmset.Beta[Constants.CSfxMod, iz] * gf[Constants.CSfxMod]
+                   + (parmset.Beta[Constants.CSfx + 2, iz] * gf[Constants.CSfxMod + 2]
+                    + parmset.Beta[Constants.CSfx + 3, iz] * gf[Constants.CSfxMod + 3]) * dffact;
             }
             else
             {
@@ -388,11 +389,11 @@ namespace NRLMSIS
             }
 
             // Migrating tide (local time) modulation factor
-            if (MsisInit.Swg[MsisConstants.CSfxMod + 1])
+            if (Initialization.Swg[Constants.CSfxMod + 1])
             {
-                f2 = parmset.Beta[MsisConstants.CSfxMod + 1, iz] * gf[MsisConstants.CSfxMod]
-                   + (parmset.Beta[MsisConstants.CSfx + 2, iz] * gf[MsisConstants.CSfxMod + 2]
-                    + parmset.Beta[MsisConstants.CSfx + 3, iz] * gf[MsisConstants.CSfxMod + 3]) * dffact;
+                f2 = parmset.Beta[Constants.CSfxMod + 1, iz] * gf[Constants.CSfxMod]
+                   + (parmset.Beta[Constants.CSfx + 2, iz] * gf[Constants.CSfxMod + 2]
+                    + parmset.Beta[Constants.CSfx + 3, iz] * gf[Constants.CSfxMod + 3]) * dffact;
             }
             else
             {
@@ -400,9 +401,9 @@ namespace NRLMSIS
             }
 
             // SPW (longitude) modulation factor
-            if (MsisInit.Swg[MsisConstants.CSfxMod + 2])
+            if (Initialization.Swg[Constants.CSfxMod + 2])
             {
-                f3 = parmset.Beta[MsisConstants.CSfxMod + 2, iz] * gf[MsisConstants.CSfxMod];
+                f3 = parmset.Beta[Constants.CSfxMod + 2, iz] * gf[Constants.CSfxMod];
             }
             else
             {
@@ -410,22 +411,22 @@ namespace NRLMSIS
             }
 
             sum = 0.0;
-            for (int j = 0; j <= MsisConstants.Mbf; j++)
+            for (int j = 0; j <= Constants.Mbf; j++)
             {
                 // Apply intra-annual modulation
-                if (MsisInit.Zsfx[j])
+                if (Initialization.Zsfx[j])
                 {
                     sum += parmset.Beta[j, iz] * gf[j] * f1;
                     continue;
                 }
                 // Apply migrating tide modulation
-                if (MsisInit.Tsfx[j])
+                if (Initialization.Tsfx[j])
                 {
                     sum += parmset.Beta[j, iz] * gf[j] * f2;
                     continue;
                 }
                 // Apply SPW modulation
-                if (MsisInit.Psfx[j])
+                if (Initialization.Psfx[j])
                 {
                     sum += parmset.Beta[j, iz] * gf[j] * f3;
                     continue;
@@ -449,15 +450,15 @@ namespace NRLMSIS
         public static double GeoMag(double[] p0, double[] bf, double[,] plg)
         {
             // Return zero if both master switches are off
-            if (!(MsisInit.Swg[MsisConstants.CMag] || MsisInit.Swg[MsisConstants.CMag + 1]))
+            if (!(Initialization.Swg[Constants.CMag] || Initialization.Swg[Constants.CMag + 1]))
             {
                 return 0.0;
             }
 
             // Copy parameters
             double[] p = (double[])p0.Clone();
-            bool[] swg1 = new bool[MsisConstants.NMag];
-            Array.Copy(MsisInit.Swg, MsisConstants.CMag, swg1, 0, MsisConstants.NMag);
+            bool[] swg1 = new bool[Constants.NMag];
+            Array.Copy(Initialization.Swg, Constants.CMag, swg1, 0, Constants.NMag);
 
             double geomag;
 
@@ -497,7 +498,7 @@ namespace NRLMSIS
                 }
 
                 // Apply switches
-                for (int i = 30; i < MsisConstants.NMag; i++)
+                for (int i = 30; i < Constants.NMag; i++)
                 {
                     if (!swg1[i]) p[i] = 0.0;
                 }
@@ -545,11 +546,11 @@ namespace NRLMSIS
         {
             // Copy parameters
             double[] p = (double[])p0.Clone();
-            bool[] swg1 = new bool[MsisConstants.NUt];
-            Array.Copy(MsisInit.Swg, MsisConstants.CUt, swg1, 0, MsisConstants.NUt);
+            bool[] swg1 = new bool[Constants.NUt];
+            Array.Copy(Initialization.Swg, Constants.CUt, swg1, 0, Constants.NUt);
 
             // Apply switches
-            for (int i = 3; i < MsisConstants.NUt; i++)
+            for (int i = 3; i < Constants.NUt; i++)
             {
                 if (!swg1[i]) p[i] = 0.0;
             }

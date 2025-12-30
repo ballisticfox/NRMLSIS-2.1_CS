@@ -12,14 +12,14 @@
 // Neutral atmosphere empirical model from the surface to lower exosphere
 // ===========================================================================
 //
-// MSISINIT: Initialization of MSIS parameters, switches, and options.
+// Initialization: Initialization of MSIS parameters, switches, and options.
 //
 //     PREREQUISITES:
 //       MSIS binary parameter file (msis21.parm)
 //
 //     CALLING SEQUENCE:
-//       MsisInit([OPTIONAL ARGUMENTS])
-//  
+//       Initialization([OPTIONAL ARGUMENTS])
+//
 //     OPTIONAL ARGUMENTS:
 //       parmPath        File path pointing to the MSIS parameter file.
 //                         Default: "" (current directory)
@@ -56,7 +56,7 @@
 //                         true = Geodetic altitude (km)
 //                         false = Geopotential height (km)
 //                         Default: true (Geodetic altitude)
-//       lSpecSelect     Boolean array (1:10) flagging which densities to 
+//       lSpecSelect     Boolean array (1:10) flagging which densities to
 //                         calculate.
 //                         true = Calculate, false = Do not calculate
 //                            1 - Mass density
@@ -71,14 +71,14 @@
 //                           10 - NO
 //                         Default values: true
 //       lMassInclude    Boolean array (1:10) flagging which species to include
-//                         in mass density calculation. Same ordering as 
+//                         in mass density calculation. Same ordering as
 //                         lSpecSelect.
 //                         Default values: true
 //       lN2Msis00       Boolean flag for retrieving NRLMSISE-00 upper
 //                         thermospheric N2 variation. See paper for details.
 //                           false: Thermospheric N2 determined entirely by
 //                             temperature profile and the constant mixing ratio
-//                             of N2 in the lower atmosphere. 
+//                             of N2 in the lower atmosphere.
 //                           true: Upper thermospheric N2 relaxes to NRLMSISE-00
 //                             values.
 //                         Default: false
@@ -89,7 +89,7 @@ using System;
 using System.IO;
 using System.Linq;
 
-namespace NRLMSIS
+namespace NRLMSIS.Infrastructure
 {
     /// <summary>
     /// Parameter subset structure for MSIS model
@@ -107,7 +107,7 @@ namespace NRLMSIS
     /// <summary>
     /// Initialization and parameter management for NRLMSIS 2.1
     /// </summary>
-    public static class MsisInit
+    public static class Initialization
     {
         // Model flags
         public static bool InitFlag { get; private set; } = false;
@@ -115,15 +115,15 @@ namespace NRLMSIS
         public static bool ZAltFlag { get; set; } = true;
         // SpecFlag and MassFlag: 0-based arrays [0:9] representing species 1-10
         // SpecFlag[0] = species 1 (mass density), SpecFlag[1] = species 2 (N2), ..., SpecFlag[9] = species 10 (NO)
-        public static bool[] SpecFlag { get; set; } = Enumerable.Repeat(true, MsisConstants.NSpec - 1).ToArray();
-        public static bool[] MassFlag { get; set; } = Enumerable.Repeat(true, MsisConstants.NSpec - 1).ToArray();
+        public static bool[] SpecFlag { get; set; } = Enumerable.Repeat(true, Constants.NSpec - 1).ToArray();
+        public static bool[] MassFlag { get; set; } = Enumerable.Repeat(true, Constants.NSpec - 1).ToArray();
         public static bool N2RFlag { get; set; } = false;
-        public static bool[] Zsfx { get; set; } = new bool[MsisConstants.Mbf + 1];
-        public static bool[] Tsfx { get; set; } = new bool[MsisConstants.Mbf + 1];
-        public static bool[] Psfx { get; set; } = new bool[MsisConstants.Mbf + 1];
-        public static bool[] Smod { get; set; } = new bool[MsisConstants.Nl + 1];
-        public static bool[] Swg { get; set; } = Enumerable.Repeat(true, MsisConstants.MaxNbf).ToArray();
-        public static double[] MassWgt { get; set; } = new double[MsisConstants.NSpec - 1];
+        public static bool[] Zsfx { get; set; } = new bool[Constants.Mbf + 1];
+        public static bool[] Tsfx { get; set; } = new bool[Constants.Mbf + 1];
+        public static bool[] Psfx { get; set; } = new bool[Constants.Mbf + 1];
+        public static bool[] Smod { get; set; } = new bool[Constants.Nl + 1];
+        public static bool[] Swg { get; set; } = Enumerable.Repeat(true, Constants.MaxNbf).ToArray();
+        public static double[] MassWgt { get; set; } = new double[Constants.NSpec - 1];
         public static float[] SwLeg { get; set; } = Enumerable.Repeat(1.0f, 25).ToArray();
         public static float[] Swc { get; set; } = new float[25];
         public static float[] Sav { get; set; } = new float[25];
@@ -154,12 +154,12 @@ namespace NRLMSIS
         public static double DHRFactNORef { get; private set; }
 
         // ==================================================================================================
-        // MSISINIT: Entry point for initializing model and loading parameters
+        // Initialization: Entry point for initializing model and loading parameters
         // ==================================================================================================
         /// <summary>
         /// Initialize MSIS model and load parameters
         /// </summary>
-        public static void MsisInitialize(
+        public static void Initialize(
             string parmPath = "",
             string parmFile = "msis21.parm",
             bool[]? switchGfn = null,
@@ -179,7 +179,7 @@ namespace NRLMSIS
             LoadParmSet(Path.Combine(parmPath1, parmFile1));
 
             // Set switches
-            Swg = Enumerable.Repeat(true, MsisConstants.MaxNbf).ToArray();
+            Swg = Enumerable.Repeat(true, Constants.MaxNbf).ToArray();
             SwLeg = Enumerable.Repeat(1.0f, 25).ToArray();
 
             if (switchGfn != null)
@@ -202,7 +202,7 @@ namespace NRLMSIS
             }
             else
             {
-                SpecFlag = Enumerable.Repeat(true, MsisConstants.NSpec - 1).ToArray();
+                SpecFlag = Enumerable.Repeat(true, Constants.NSpec - 1).ToArray();
             }
 
             if (SpecFlag[0])
@@ -213,12 +213,12 @@ namespace NRLMSIS
                 }
                 else
                 {
-                    MassFlag = Enumerable.Repeat(true, MsisConstants.NSpec - 1).ToArray();
+                    MassFlag = Enumerable.Repeat(true, Constants.NSpec - 1).ToArray();
                 }
             }
             else
             {
-                MassFlag = Enumerable.Repeat(false, MsisConstants.NSpec - 1).ToArray();
+                MassFlag = Enumerable.Repeat(false, Constants.NSpec - 1).ToArray();
             }
 
             // Where massflag is true, specflag must also be true
@@ -234,7 +234,7 @@ namespace NRLMSIS
             //          masswgt(10) = 0.0 (NO)
             // C#: MassWgt[0:9] representing species 1-10
             //     MassWgt[0] = species 1 (mass), MassWgt[1] = species 2 (N2), etc.
-            MassWgt = new double[MsisConstants.NSpec - 1];
+            MassWgt = new double[Constants.NSpec - 1];
             for (int i = 0; i < MassFlag.Length; i++)
             {
                 MassWgt[i] = MassFlag[i] ? 1.0 : 0.0;
@@ -249,7 +249,7 @@ namespace NRLMSIS
             // MassWgt[i] = species i+1, multiply by SpecMass[i+1]
             for (int i = 0; i < MassWgt.Length; i++)
             {
-                MassWgt[i] *= MsisConstants.SpecMass[i + 1];
+                MassWgt[i] *= Constants.SpecMass[i + 1];
             }
             MassWgt[9] = 0.0; // NO (species 10) doesn't contribute to mass density
 
@@ -269,25 +269,25 @@ namespace NRLMSIS
             NVertParm = 0;
 
             // Model formulation parameter subsets
-            TN = InitSubset(0, MsisConstants.Nl, MsisConstants.MaxNbf, "TN");
-            PR = InitSubset(0, MsisConstants.Nl, MsisConstants.MaxNbf, "PR");
-            N2 = InitSubset(0, MsisConstants.Nls, MsisConstants.MaxNbf, "N2");
-            O2 = InitSubset(0, MsisConstants.Nls, MsisConstants.MaxNbf, "O2");
-            O1 = InitSubset(0, MsisConstants.Nls + MsisConstants.NsplO1, MsisConstants.MaxNbf, "O1");
-            HE = InitSubset(0, MsisConstants.Nls, MsisConstants.MaxNbf, "HE");
-            H1 = InitSubset(0, MsisConstants.Nls, MsisConstants.MaxNbf, "H1");
-            AR = InitSubset(0, MsisConstants.Nls, MsisConstants.MaxNbf, "AR");
-            N1 = InitSubset(0, MsisConstants.Nls, MsisConstants.MaxNbf, "N1");
-            OA = InitSubset(0, MsisConstants.Nls, MsisConstants.MaxNbf, "OA");
-            NO = InitSubset(0, MsisConstants.Nls + MsisConstants.NsplNO, MsisConstants.MaxNbf, "NO");
+            TN = InitSubset(0, Constants.Nl, Constants.MaxNbf, "TN");
+            PR = InitSubset(0, Constants.Nl, Constants.MaxNbf, "PR");
+            N2 = InitSubset(0, Constants.Nls, Constants.MaxNbf, "N2");
+            O2 = InitSubset(0, Constants.Nls, Constants.MaxNbf, "O2");
+            O1 = InitSubset(0, Constants.Nls + Constants.NsplO1, Constants.MaxNbf, "O1");
+            HE = InitSubset(0, Constants.Nls, Constants.MaxNbf, "HE");
+            H1 = InitSubset(0, Constants.Nls, Constants.MaxNbf, "H1");
+            AR = InitSubset(0, Constants.Nls, Constants.MaxNbf, "AR");
+            N1 = InitSubset(0, Constants.Nls, Constants.MaxNbf, "N1");
+            OA = InitSubset(0, Constants.Nls, Constants.MaxNbf, "OA");
+            NO = InitSubset(0, Constants.Nls + Constants.NsplNO, Constants.MaxNbf, "NO");
 
             // Add the surface pressure parameter to the vertical parameter counter
             NVertParm = NVertParm + 1;
 
             // Set solar flux modulation flags
-            Zsfx = new bool[MsisConstants.Mbf + 1];
-            Tsfx = new bool[MsisConstants.Mbf + 1];
-            Psfx = new bool[MsisConstants.Mbf + 1];
+            Zsfx = new bool[Constants.Mbf + 1];
+            Tsfx = new bool[Constants.Mbf + 1];
+            Psfx = new bool[Constants.Mbf + 1];
 
             // F1, solar flux modulation of the zonal mean asymmetric annual terms
             Zsfx[9] = Zsfx[10] = true;    // Pl(1,0) annual terms
@@ -295,13 +295,13 @@ namespace NRLMSIS
             Zsfx[17] = Zsfx[18] = true;   // Pl(5,0) annual terms
 
             // F2, solar flux modulation of the tides
-            for (int i = MsisConstants.CTide; i < MsisConstants.CSpw; i++)
+            for (int i = Constants.CTide; i < Constants.CSpw; i++)
             {
                 Tsfx[i] = true;
             }
 
             // F3, solar flux modulation of stationary planetary wave 1
-            for (int i = MsisConstants.CSpw; i < MsisConstants.CSpw + 60; i++)
+            for (int i = Constants.CSpw; i < Constants.CSpw + 60; i++)
             {
                 Psfx[i] = true;
             }
@@ -309,32 +309,32 @@ namespace NRLMSIS
             // Calculate reciprocal node difference arrays
             for (int k = 2; k <= 6; k++)
             {
-                for (int j = 0; j <= MsisConstants.Nl; j++)
+                for (int j = 0; j <= Constants.Nl; j++)
                 {
-                    EtaTN[j, k - 2] = 1.0 / (MsisConstants.NodesTN[j + k - 1] - MsisConstants.NodesTN[j]);
+                    EtaTN[j, k - 2] = 1.0 / (Constants.NodesTN[j + k - 1] - Constants.NodesTN[j]);
                 }
             }
 
             for (int k = 2; k <= 4; k++)
             {
-                for (int j = 0; j <= MsisConstants.NdO1 - k + 1; j++)
+                for (int j = 0; j <= Constants.NdO1 - k + 1; j++)
                 {
-                    EtaO1[j, k - 2] = 1.0 / (MsisConstants.NodesO1[j + k - 1] - MsisConstants.NodesO1[j]);
+                    EtaO1[j, k - 2] = 1.0 / (Constants.NodesO1[j + k - 1] - Constants.NodesO1[j]);
                 }
-                for (int j = 0; j <= MsisConstants.NdNO - k + 1; j++)
+                for (int j = 0; j <= Constants.NdNO - k + 1; j++)
                 {
-                    EtaNO[j, k - 2] = 1.0 / (MsisConstants.NodesNO[j + k - 1] - MsisConstants.NodesNO[j]);
+                    EtaNO[j, k - 2] = 1.0 / (Constants.NodesNO[j + k - 1] - Constants.NodesNO[j]);
                 }
             }
 
             // Calculate C1 constraint terms for O and NO related to the tapered logistic correction
-            double gammaTerm0 = Math.Tanh((MsisConstants.ZetaRefO1 - MsisConstants.ZetaGamma) * MsisConstants.HGamma);
+            double gammaTerm0 = Math.Tanh((Constants.ZetaRefO1 - Constants.ZetaGamma) * Constants.HGamma);
             HRFactO1Ref = 0.5 * (1.0 + gammaTerm0);
-            DHRFactO1Ref = (1.0 - (MsisConstants.ZetaRefO1 - MsisConstants.ZetaGamma) * (1.0 - gammaTerm0) * MsisConstants.HGamma) / HRFactO1Ref;
+            DHRFactO1Ref = (1.0 - (Constants.ZetaRefO1 - Constants.ZetaGamma) * (1.0 - gammaTerm0) * Constants.HGamma) / HRFactO1Ref;
 
-            gammaTerm0 = Math.Tanh((MsisConstants.ZetaRefNO - MsisConstants.ZetaGamma) * MsisConstants.HGamma);
+            gammaTerm0 = Math.Tanh((Constants.ZetaRefNO - Constants.ZetaGamma) * Constants.HGamma);
             HRFactNORef = 0.5 * (1.0 + gammaTerm0);
-            DHRFactNORef = (1.0 - (MsisConstants.ZetaRefNO - MsisConstants.ZetaGamma) * (1.0 - gammaTerm0) * MsisConstants.HGamma) / HRFactNORef;
+            DHRFactNORef = (1.0 - (Constants.ZetaRefNO - Constants.ZetaGamma) * (1.0 - gammaTerm0) * Constants.HGamma) / HRFactNORef;
 
             // Set parameter space initialization flag
             HaveParmSpace = true;
@@ -384,7 +384,7 @@ namespace NRLMSIS
             }
 
             // Read in parameter values into temporary double-precision array
-            double[,] parmIn = new double[MsisConstants.MaxNbf, NVertParm];
+            double[,] parmIn = new double[Constants.MaxNbf, NVertParm];
 
             try
             {
@@ -393,7 +393,7 @@ namespace NRLMSIS
                     // Read parameters in column-major order (Fortran style)
                     for (int col = 0; col < NVertParm; col++)
                     {
-                        for (int row = 0; row < MsisConstants.MaxNbf; row++)
+                        for (int row = 0; row < Constants.MaxNbf; row++)
                         {
                             parmIn[row, col] = reader.ReadDouble();
                         }
@@ -418,7 +418,7 @@ namespace NRLMSIS
 
             i0 = i1 + 1;
             i1 = i0;
-            for (int j = 0; j < MsisConstants.MaxNbf; j++)
+            for (int j = 0; j < Constants.MaxNbf; j++)
             {
                 PR.Beta[j, PR.Bl] = parmIn[j, i0];
             }
@@ -459,13 +459,13 @@ namespace NRLMSIS
             i1 = i0 + NO.Nl - NO.Bl;
             CopyParameters(parmIn, NO.Beta, i0, i1, NO.Bl, NO.Nl);
 
-            // Set solar flux modulation flags; if on for a given vertical parameter, then sfluxmod is called by tfnparm
-            Smod = new bool[MsisConstants.Nl + 1];
-            for (int iz = 0; iz <= MsisConstants.Nl; iz++)
+            // Set solar flux modulation flags; if on for a given vertical parameter, then sfluxmod is called by TemperatureParameters
+            Smod = new bool[Constants.Nl + 1];
+            for (int iz = 0; iz <= Constants.Nl; iz++)
             {
-                if (TN.Beta[MsisConstants.CSfxMod + 0, iz - TN.Bl] != 0 ||
-                    TN.Beta[MsisConstants.CSfxMod + 1, iz - TN.Bl] != 0 ||
-                    TN.Beta[MsisConstants.CSfxMod + 2, iz - TN.Bl] != 0)
+                if (TN.Beta[Constants.CSfxMod + 0, iz - TN.Bl] != 0 ||
+                    TN.Beta[Constants.CSfxMod + 1, iz - TN.Bl] != 0 ||
+                    TN.Beta[Constants.CSfxMod + 2, iz - TN.Bl] != 0)
                 {
                     Smod[iz] = true;
                 }
@@ -478,7 +478,7 @@ namespace NRLMSIS
         // Helper method to copy parameters from input array to subset array
         private static void CopyParameters(double[,] source, double[,] dest, int srcColStart, int srcColEnd, int destBl, int destNl)
         {
-            for (int j = 0; j < MsisConstants.MaxNbf; j++)
+            for (int j = 0; j < Constants.MaxNbf; j++)
             {
                 for (int col = 0; col <= srcColEnd - srcColStart; col++)
                 {
@@ -493,21 +493,21 @@ namespace NRLMSIS
         private static void PressParm()
         {
             // Integrate pressure on nodes up to the last fully mixed level
-            for (int j = 0; j <= MsisConstants.Mbf; j++)
+            for (int j = 0; j <= Constants.Mbf; j++)
             {
                 double lnz = 0.0;
                 for (int b = 0; b <= 3; b++)
                 {
-                    lnz = lnz + TN.Beta[j, b] * MsisConstants.Gwht[b] * MsisConstants.MbarG0DivKB;
+                    lnz = lnz + TN.Beta[j, b] * Constants.Gwht[b] * Constants.MbarG0DivKB;
                 }
                 PR.Beta[j, 1] = -lnz;
 
-                for (int iz = 1; iz <= MsisConstants.IzFmx; iz++)
+                for (int iz = 1; iz <= Constants.IzFmx; iz++)
                 {
                     lnz = 0.0;
                     for (int b = 0; b <= 3; b++)
                     {
-                        lnz = lnz + TN.Beta[j, iz + b] * MsisConstants.Gwht[b] * MsisConstants.MbarG0DivKB;
+                        lnz = lnz + TN.Beta[j, iz + b] * Constants.Gwht[b] * Constants.MbarG0DivKB;
                     }
                     PR.Beta[j, iz + 1] = PR.Beta[j, iz] - lnz;
                 }
@@ -538,7 +538,7 @@ namespace NRLMSIS
             // Main effects
             // Note: In the comments below, switch indices refer to the logical 1-based Fortran indices
             Swg[0] = true; // Global term must be on
-            SetRange(Swg, MsisConstants.CSfx, MsisConstants.CSfx + MsisConstants.NSfx - 1, SwLeg[0] == 1.0f); // Solar flux (switch 1)
+            SetRange(Swg, Constants.CSfx, Constants.CSfx + Constants.NSfx - 1, SwLeg[0] == 1.0f); // Solar flux (switch 1)
             Swg[310] = (SwLeg[0] == 1.0f); // Solar flux (truncated quadratic F10.7a function) (switch 1)
             SetRange(Swg, 1, 6, SwLeg[1] == 1.0f); // Time independent (switch 2)
             SetRange(Swg, 304, 305, SwLeg[1] == 1.0f); // Time independent (extra, F10.7a modulated terms) (switch 2)
@@ -556,26 +556,26 @@ namespace NRLMSIS
             SetRange(Swg, 145, 184, SwLeg[13] == 1.0f); // Terdiurnal (switch 14)
 
             // Geomagnetic activity mode master switch
-            Swg[MsisConstants.CMag] = Swg[MsisConstants.CMag + 1] = false;
+            Swg[Constants.CMag] = Swg[Constants.CMag + 1] = false;
             if ((SwLeg[8] > 0) || (SwLeg[12] == 1)) // switch 9 or switch 13
             {
-                Swg[MsisConstants.CMag] = Swg[MsisConstants.CMag + 1] = true; // Daily mode master switch
+                Swg[Constants.CMag] = Swg[Constants.CMag + 1] = true; // Daily mode master switch
             }
             if (SwLeg[8] < 0) // switch 9
             {
-                Swg[MsisConstants.CMag] = false;
-                Swg[MsisConstants.CMag + 1] = true; // Storm-time mode master switch
+                Swg[Constants.CMag] = false;
+                Swg[Constants.CMag + 1] = true; // Storm-time mode master switch
             }
 
-            SetRange(Swg, MsisConstants.CMag + 2, MsisConstants.CMag + 12, SwLeg[8] == 1.0f); // Daily geomagnetic activity terms (switch 9)
-            SetRange(Swg, MsisConstants.CMag + 28, MsisConstants.CMag + 40, SwLeg[8] == -1.0f); // Storm-time geomagnetic activity terms (switch 9)
-            SetRange(Swg, MsisConstants.CSpw, MsisConstants.CSfx - 1, (SwLeg[10] == 1.0f) && (SwLeg[9] == 1.0f)); // Longitudinal (switches 11 and 10)
-            SetRange(Swg, MsisConstants.CUt, MsisConstants.CUt + MsisConstants.NUt - 1, (SwLeg[11] == 1.0f) && (SwLeg[9] == 1.0f)); // UT/Lon (switches 12 and 10)
-            SetRange(Swg, MsisConstants.CMag + 13, MsisConstants.CMag + 25, (SwLeg[12] == 1.0f) && (SwLeg[9] == 1.0f)); // Mixed UT/Lon/Geomag (Daily mode terms) (switches 13 and 10)
-            SetRange(Swg, MsisConstants.CMag + 41, MsisConstants.CMag + 53, (SwLeg[12] == 1.0f) && (SwLeg[9] == 1.0f)); // Mixed UT/Lon/Geomag (Storm-time mode terms) (switches 13 and 10)
+            SetRange(Swg, Constants.CMag + 2, Constants.CMag + 12, SwLeg[8] == 1.0f); // Daily geomagnetic activity terms (switch 9)
+            SetRange(Swg, Constants.CMag + 28, Constants.CMag + 40, SwLeg[8] == -1.0f); // Storm-time geomagnetic activity terms (switch 9)
+            SetRange(Swg, Constants.CSpw, Constants.CSfx - 1, (SwLeg[10] == 1.0f) && (SwLeg[9] == 1.0f)); // Longitudinal (switches 11 and 10)
+            SetRange(Swg, Constants.CUt, Constants.CUt + Constants.NUt - 1, (SwLeg[11] == 1.0f) && (SwLeg[9] == 1.0f)); // UT/Lon (switches 12 and 10)
+            SetRange(Swg, Constants.CMag + 13, Constants.CMag + 25, (SwLeg[12] == 1.0f) && (SwLeg[9] == 1.0f)); // Mixed UT/Lon/Geomag (Daily mode terms) (switches 13 and 10)
+            SetRange(Swg, Constants.CMag + 41, Constants.CMag + 53, (SwLeg[12] == 1.0f) && (SwLeg[9] == 1.0f)); // Mixed UT/Lon/Geomag (Storm-time mode terms) (switches 13 and 10)
 
             // Cross terms
-            SetRange(Swg, MsisConstants.CSfxMod, MsisConstants.CSfxMod + MsisConstants.NSfxMod - 1, Swc[0] == 1.0f); // Solar activity modulation
+            SetRange(Swg, Constants.CSfxMod, Constants.CSfxMod + Constants.NSfxMod - 1, Swc[0] == 1.0f); // Solar activity modulation
             if (Swc[0] == 0)
             {
                 SetRange(Swg, 302, 303, false); // Solar zenith angle
