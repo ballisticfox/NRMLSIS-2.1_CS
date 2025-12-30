@@ -12,6 +12,7 @@ using NRLMSIS.Core;
 using NRLMSIS.Configuration;
 using NRLMSIS.Calculators;
 using NRLMSIS.Infrastructure;
+using NRLMSIS.Exceptions;
 
 namespace NRLMSIS.Models
 {
@@ -63,7 +64,7 @@ namespace NRLMSIS.Models
             }
             catch (Exception ex) when (!(ex is ArgumentException || ex is ArgumentOutOfRangeException))
             {
-                throw new MsisCalculationException(
+                throw new MSISCalculationException(
                     $"Calculation failed at location {location}",
                     location,
                     weather,

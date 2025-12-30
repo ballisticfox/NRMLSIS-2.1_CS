@@ -10,13 +10,13 @@
 using System;
 using NRLMSIS.Core;
 
-namespace NRLMSIS.Models
+namespace NRLMSIS.Exceptions
 {
     /// <summary>
     /// Exception thrown when MSIS calculation fails.
     /// Contains context about the failed calculation.
     /// </summary>
-    public class MsisCalculationException : Exception
+    public class MSISCalculationException : Exception
     {
         /// <summary>Gets the location where the calculation failed.</summary>
         public AtmosphericLocation? Location { get; }
@@ -24,16 +24,16 @@ namespace NRLMSIS.Models
         /// <summary>Gets the space weather conditions when the calculation failed.</summary>
         public SpaceWeather? Weather { get; }
 
-        public MsisCalculationException(string message) : base(message)
+        public MSISCalculationException(string message) : base(message)
         {
         }
 
-        public MsisCalculationException(string message, Exception innerException)
+        public MSISCalculationException(string message, Exception innerException)
             : base(message, innerException)
         {
         }
 
-        public MsisCalculationException(
+        public MSISCalculationException(
             string message,
             AtmosphericLocation location,
             SpaceWeather weather,

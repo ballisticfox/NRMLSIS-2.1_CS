@@ -5,7 +5,7 @@ using NRLMSIS.Core;
 using NRLMSIS.Models;
 using NRLMSIS.Infrastructure;
 
-namespace NRLMSIS
+namespace NRLMSIS.Testing
 {
     class Testing
     {
