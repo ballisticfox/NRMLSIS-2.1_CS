@@ -15,14 +15,14 @@
 // GTD8D: Legacy wrapper with input and output arguments used in NRLMSISE-00
 //
 //     PREREQUISITES:
-//       Must first run MsisInit.MsisInitialize to load parameters and set switches. The
+//       Must first run Initialization.Initializationialize to load parameters and set switches. The
 //       MsisCalc.Calculate method checks for initialization and does a default
 //       initialization if necessary. This self-initialization will be removed
 //       in future versions.
 //
 //     CALLING SEQUENCE:
 //       Gtd8d.Calculate(iyd, sec, alt, glat, glong, stl, f107a, f107, ap, mass, out d, out t);
-//  
+//
 //     INPUT VARIABLES:
 //       iyd    Year and day as YYDDD (day of year from 1 to 365 (or 366))
 //                (Year is ignored in current model)
@@ -43,18 +43,18 @@
 //                    prior to current time
 //                [6] Average of eight 3 hr ap indices from 36 to 57 hrs
 //                    prior to current time
-//              ap[1:6] are only used when switch_legacy[8] = -1.0 in MsisInitialize
+//              ap[1:6] are only used when switch_legacy[8] = -1.0 in Initializationialize
 //       mass   Mass number (Ignored in 2.1)
 //
-//     NOTES ON INPUT VARIABLES: 
-//       - If lZAltType = false in the MsisInitialize call, then the alt input
+//     NOTES ON INPUT VARIABLES:
+//       - If lZAltType = false in the Initializationialize call, then the alt input
 //         argument is treated as geopotential height.
 //       - The stl input argument is ignored in NRLMSIS 2.1. Instead, local time
 //         is computed from universal time and longitude.
 //       - F107 and F107A values are the 10.7 cm radio flux at the Sun-Earth
-//         distance, not the radio flux at 1 AU. 
-//       - The mass input argument is ignored in NRLMSIS 2.1; species to be 
-//         calculated are set in MsisInitialize.
+//         distance, not the radio flux at 1 AU.
+//       - The mass input argument is ignored in NRLMSIS 2.1; species to be
+//         calculated are set in Initializationialize.
 //
 //     OUTPUT VARIABLES:
 //       d[0]  He number density (cm-3)
@@ -70,9 +70,9 @@
 //       t[0]  Exospheric temperature (K)
 //       t[1]  Temperature at altitude (K)
 //
-//     NOTES ON OUTPUT VARIABLES: 
+//     NOTES ON OUTPUT VARIABLES:
 //       - Missing density values are returned as 9.999e-38
-//       - Species included in mass density calculation are set in MsisInitialize
+//       - Species included in mass density calculation are set in Initializationialize
 //
 // ===========================================================================
 
@@ -83,10 +83,10 @@ namespace NRLMSIS
     /// <summary>
     /// Legacy NRLMSISE-00 compatible interface wrapper
     /// </summary>
-    public static class Gtd8d
+    public static class LegacyInterface
     {
         // ==================================================================================================
-        // GTD8D: Legacy wrapper
+        // Legacy wrapper
         // ==================================================================================================
         /// <summary>
         /// Legacy NRLMSISE-00 style interface for NRLMSIS 2.1
@@ -124,7 +124,7 @@ namespace NRLMSIS
             // Call the new subroutine
             double xtn, xtex;
             double[] xdn;
-            MsisCalc.Calculate(xday, xutsec, xalt, xlat, xlon, xsfluxavg, xsflux, xap,
+            MSISCalculator.Calculate(xday, xutsec, xalt, xlat, xlon, xsfluxavg, xsflux, xap,
                              out xtn, out xdn, out xtex);
 
             // Initialize output arrays
@@ -140,13 +140,13 @@ namespace NRLMSIS
             // Process all densities except mass density first
             for (int i = 1; i < 10; i++)
             {
-                if (xdn[i] != MsisConstants.DMissing)
+                if (xdn[i] != Constants.DMissing)
                 {
                     xdn[i] = xdn[i] * 1e-6; // m-3 to cm-3
                 }
             }
             // Special handling for mass density (index 0)
-            if (xdn[0] != MsisConstants.DMissing)
+            if (xdn[0] != Constants.DMissing)
             {
                 xdn[0] = xdn[0] * 1e-3; // kg/m3 to g/cm3
             }

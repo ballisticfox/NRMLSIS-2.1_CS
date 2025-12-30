@@ -23,7 +23,7 @@ namespace NRLMSIS
     /// <summary>
     /// Constants and hardwired parameters for NRLMSIS 2.1
     /// </summary>
-    public static class MsisConstants
+    public static class Constants
     {
         // Floating Point Precision
         // Note: C# uses double (64-bit) by default. Use float for single precision if needed.
@@ -279,7 +279,7 @@ namespace NRLMSIS
         };
 
         // Static constructor to initialize computed arrays
-        static MsisConstants()
+        static Constants()
         {
             // Initialize WBeta: (nodesTN(4:nd) - nodesTN(0:nl)) / 4.0
             WBeta = new double[Nl + 1];

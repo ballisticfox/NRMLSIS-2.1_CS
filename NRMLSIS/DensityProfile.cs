@@ -16,7 +16,7 @@
 // MSIS_Dfn: Contains vertical species density profile parameters and subroutines
 //
 // Key Translation Notes:
-// - DnParm structure contains all density profile parameters for each species
+// - DensityParameters structure contains all density profile parameters for each species
 // - Array indexing: Fortran arrays with negative indices mapped to C# 0-based arrays
 // - Species indices: 2=N2, 3=O2, 4=O, 5=He, 6=H, 7=Ar, 8=N, 9=Anomalous O, 10=NO
 // **************************************************************************************************
@@ -28,7 +28,7 @@ namespace NRLMSIS
     /// <summary>
     /// Density profile parameters structure
     /// </summary>
-    public class DnParm
+    public class DensityParameters
     {
         public double LnPhiF { get; set; }                                        // Natural log of mixing ratio at zetaF
         public double LnDRef { get; set; }                                        // Natural log of number density at reference height
@@ -41,7 +41,7 @@ namespace NRLMSIS
         public double R { get; set; }                                             // Chemical/dynamical term coefficient
         public double ZetaR { get; set; }                                         // Chemical/dynamical term reference height
         public double HR { get; set; }                                            // Chemical/dynamical term scale height
-        public double[] Cf { get; set; } = new double[MsisConstants.NsplO1 + 2]; // Merged spline coefficients [0:nsplO1+1]
+        public double[] Cf { get; set; } = new double[Constants.NsplO1 + 2]; // Merged spline coefficients [0:nsplO1+1]
         public double ZRef { get; set; }                                          // Reference height for hydrostatic integral
         public double[] Mi { get; set; } = new double[5];                         // Effective mass at nodes [0:4]
         public double[] ZetaMi { get; set; } = new double[5];                     // Height of nodes [0:4]
@@ -58,7 +58,7 @@ namespace NRLMSIS
     /// <summary>
     /// Density profile functions for each species
     /// </summary>
-    public static class MsisDfn
+    public static class DensityProfile
     {
         // ==================================================================================================
         // DFNPARM: Compute the species density profile parameters
@@ -70,9 +70,9 @@ namespace NRLMSIS
         /// <param name="gf">Array of horizontal and temporal basis function terms [0:maxnbf-1]</param>
         /// <param name="tpro">Structure containing temperature vertical profile parameters</param>
         /// <param name="dpro">Output: density vertical profile parameters</param>
-        public static void DfnParm(int ispec, double[] gf, TnParm tpro, out DnParm dpro)
+        public static void DfnParm(int ispec, double[] gf, TemperatureProfile tpro, out DensityParameters dpro)
         {
-            dpro = new DnParm();
+            dpro = new DensityParameters();
             dpro.ISpec = ispec;
 
             int izf, i, i1, iz;
@@ -85,18 +85,18 @@ namespace NRLMSIS
             // Helper to extract geomag parameters and basis functions
             double[] ExtractGeomagParms(BasisSubset subset, int col)
             {
-                double[] parms = new double[MsisConstants.NMag];
-                for (int idx = 0; idx < MsisConstants.NMag; idx++)
+                double[] parms = new double[Constants.NMag];
+                for (int idx = 0; idx < Constants.NMag; idx++)
                 {
-                    parms[idx] = subset.Beta[MsisConstants.CMag + idx, col - subset.Bl];
+                    parms[idx] = subset.Beta[Constants.CMag + idx, col - subset.Bl];
                 }
                 return parms;
             }
 
             double[] geomagBf1 = new double[13];
-            Array.Copy(gf, MsisConstants.CMag, geomagBf1, 0, 13);
+            Array.Copy(gf, Constants.CMag, geomagBf1, 0, 13);
             double[,] geomagBf2 = new double[7, 2];
-            int gfOffset = MsisConstants.CMag + 13;
+            int gfOffset = Constants.CMag + 13;
             for (int n = 0; n <= 6; n++)
             {
                 geomagBf2[n, 0] = gf[gfOffset + n];
@@ -105,205 +105,205 @@ namespace NRLMSIS
 
             double[] utdepParms;
             double[] utdepBf = new double[9];
-            Array.Copy(gf, MsisConstants.CUt, utdepBf, 0, 9);
+            Array.Copy(gf, Constants.CUt, utdepBf, 0, 9);
 
             switch (ispec)
             {
                 case 2: // Molecular Nitrogen
-                    dpro.LnPhiF = MsisConstants.LnVmr[ispec]; // ispec=2, access LnVmr[2]
+                    dpro.LnPhiF = Constants.LnVmr[ispec]; // ispec=2, access LnVmr[2]
                     dpro.LnDRef = tpro.LnDTotF + dpro.LnPhiF;
-                    dpro.ZRef = MsisConstants.ZetaF;
+                    dpro.ZRef = Constants.ZetaF;
                     dpro.ZMin = -1.0;
-                    dpro.ZHyd = MsisConstants.ZetaF;
-                    dpro.ZetaM = DotProduct(MsisInit.N2.Beta, 0, MsisConstants.Mbf, 1, gf, 0, MsisConstants.Mbf);
-                    dpro.HML = MsisInit.N2.Beta[0, 2 - MsisInit.N2.Bl];
-                    dpro.HMU = MsisInit.N2.Beta[0, 3 - MsisInit.N2.Bl];
+                    dpro.ZHyd = Constants.ZetaF;
+                    dpro.ZetaM = DotProduct(Initialization.N2.Beta, 0, Constants.Mbf, 1, gf, 0, Constants.Mbf);
+                    dpro.HML = Initialization.N2.Beta[0, 2 - Initialization.N2.Bl];
+                    dpro.HMU = Initialization.N2.Beta[0, 3 - Initialization.N2.Bl];
                     dpro.R = 0.0;
-                    if (MsisInit.N2RFlag)
+                    if (Initialization.N2RFlag)
                     {
-                        dpro.R = DotProduct(MsisInit.N2.Beta, 0, MsisConstants.Mbf, 7, gf, 0, MsisConstants.Mbf);
+                        dpro.R = DotProduct(Initialization.N2.Beta, 0, Constants.Mbf, 7, gf, 0, Constants.Mbf);
                     }
-                    dpro.ZetaR = MsisInit.N2.Beta[0, 8 - MsisInit.N2.Bl];
-                    dpro.HR = MsisInit.N2.Beta[0, 9 - MsisInit.N2.Bl];
+                    dpro.ZetaR = Initialization.N2.Beta[0, 8 - Initialization.N2.Bl];
+                    dpro.HR = Initialization.N2.Beta[0, 9 - Initialization.N2.Bl];
                     break;
 
                 case 3: // Molecular Oxygen
-                    dpro.LnPhiF = MsisConstants.LnVmr[ispec]; // ispec=3, access LnVmr[3]
+                    dpro.LnPhiF = Constants.LnVmr[ispec]; // ispec=3, access LnVmr[3]
                     dpro.LnDRef = tpro.LnDTotF + dpro.LnPhiF;
-                    dpro.ZRef = MsisConstants.ZetaF;
+                    dpro.ZRef = Constants.ZetaF;
                     dpro.ZMin = -1.0;
-                    dpro.ZHyd = MsisConstants.ZetaF;
-                    dpro.ZetaM = MsisInit.O2.Beta[0, 1 - MsisInit.O2.Bl];
-                    dpro.HML = MsisInit.O2.Beta[0, 2 - MsisInit.O2.Bl];
-                    dpro.HMU = MsisInit.O2.Beta[0, 3 - MsisInit.O2.Bl];
-                    dpro.R = DotProduct(MsisInit.O2.Beta, 0, MsisConstants.Mbf, 7, gf, 0, MsisConstants.Mbf);
-                    dpro.R += MsisGfn.GeoMag(ExtractGeomagParms(MsisInit.O2, 7), geomagBf1, geomagBf2);
-                    dpro.ZetaR = MsisInit.O2.Beta[0, 8 - MsisInit.O2.Bl];
-                    dpro.HR = MsisInit.O2.Beta[0, 9 - MsisInit.O2.Bl];
+                    dpro.ZHyd = Constants.ZetaF;
+                    dpro.ZetaM = Initialization.O2.Beta[0, 1 - Initialization.O2.Bl];
+                    dpro.HML = Initialization.O2.Beta[0, 2 - Initialization.O2.Bl];
+                    dpro.HMU = Initialization.O2.Beta[0, 3 - Initialization.O2.Bl];
+                    dpro.R = DotProduct(Initialization.O2.Beta, 0, Constants.Mbf, 7, gf, 0, Constants.Mbf);
+                    dpro.R += BasisFunctions.GeoMag(ExtractGeomagParms(Initialization.O2, 7), geomagBf1, geomagBf2);
+                    dpro.ZetaR = Initialization.O2.Beta[0, 8 - Initialization.O2.Bl];
+                    dpro.HR = Initialization.O2.Beta[0, 9 - Initialization.O2.Bl];
                     break;
 
                 case 4: // Atomic Oxygen
                     dpro.LnPhiF = 0.0;
-                    dpro.LnDRef = DotProduct(MsisInit.O1.Beta, 0, MsisConstants.Mbf, 0, gf, 0, MsisConstants.Mbf);
-                    dpro.ZRef = MsisConstants.ZetaRefO1;
-                    dpro.ZMin = MsisConstants.NodesO1[3];
-                    dpro.ZHyd = MsisConstants.ZetaRefO1;
-                    dpro.ZetaM = MsisInit.O1.Beta[0, 1 - MsisInit.O1.Bl];
-                    dpro.HML = MsisInit.O1.Beta[0, 2 - MsisInit.O1.Bl];
-                    dpro.HMU = MsisInit.O1.Beta[0, 3 - MsisInit.O1.Bl];
-                    dpro.C = DotProduct(MsisInit.O1.Beta, 0, MsisConstants.Mbf, 4, gf, 0, MsisConstants.Mbf);
-                    dpro.ZetaC = MsisInit.O1.Beta[0, 5 - MsisInit.O1.Bl];
-                    dpro.HC = MsisInit.O1.Beta[0, 6 - MsisInit.O1.Bl];
-                    dpro.R = DotProduct(MsisInit.O1.Beta, 0, MsisConstants.Mbf, 7, gf, 0, MsisConstants.Mbf);
-                    dpro.R += MsisGfn.SFluxMod(7, gf, MsisInit.O1, 0.0);
-                    dpro.R += MsisGfn.GeoMag(ExtractGeomagParms(MsisInit.O1, 7), geomagBf1, geomagBf2);
-                    utdepParms = new double[MsisConstants.NUt];
-                    for (int idx = 0; idx < MsisConstants.NUt; idx++)
+                    dpro.LnDRef = DotProduct(Initialization.O1.Beta, 0, Constants.Mbf, 0, gf, 0, Constants.Mbf);
+                    dpro.ZRef = Constants.ZetaRefO1;
+                    dpro.ZMin = Constants.NodesO1[3];
+                    dpro.ZHyd = Constants.ZetaRefO1;
+                    dpro.ZetaM = Initialization.O1.Beta[0, 1 - Initialization.O1.Bl];
+                    dpro.HML = Initialization.O1.Beta[0, 2 - Initialization.O1.Bl];
+                    dpro.HMU = Initialization.O1.Beta[0, 3 - Initialization.O1.Bl];
+                    dpro.C = DotProduct(Initialization.O1.Beta, 0, Constants.Mbf, 4, gf, 0, Constants.Mbf);
+                    dpro.ZetaC = Initialization.O1.Beta[0, 5 - Initialization.O1.Bl];
+                    dpro.HC = Initialization.O1.Beta[0, 6 - Initialization.O1.Bl];
+                    dpro.R = DotProduct(Initialization.O1.Beta, 0, Constants.Mbf, 7, gf, 0, Constants.Mbf);
+                    dpro.R += BasisFunctions.SFluxMod(7, gf, Initialization.O1, 0.0);
+                    dpro.R += BasisFunctions.GeoMag(ExtractGeomagParms(Initialization.O1, 7), geomagBf1, geomagBf2);
+                    utdepParms = new double[Constants.NUt];
+                    for (int idx = 0; idx < Constants.NUt; idx++)
                     {
-                        utdepParms[idx] = MsisInit.O1.Beta[MsisConstants.CUt + idx, 7 - MsisInit.O1.Bl];
+                        utdepParms[idx] = Initialization.O1.Beta[Constants.CUt + idx, 7 - Initialization.O1.Bl];
                     }
-                    dpro.R += MsisGfn.UtDep(utdepParms, utdepBf);
-                    dpro.ZetaR = MsisInit.O1.Beta[0, 8 - MsisInit.O1.Bl];
-                    dpro.HR = MsisInit.O1.Beta[0, 9 - MsisInit.O1.Bl];
+                    dpro.R += BasisFunctions.UtDep(utdepParms, utdepBf);
+                    dpro.ZetaR = Initialization.O1.Beta[0, 8 - Initialization.O1.Bl];
+                    dpro.HR = Initialization.O1.Beta[0, 9 - Initialization.O1.Bl];
                     // Unconstrained splines
-                    for (izf = 0; izf < MsisConstants.NsplO1; izf++)
+                    for (izf = 0; izf < Constants.NsplO1; izf++)
                     {
-                        dpro.Cf[izf] = DotProduct(MsisInit.O1.Beta, 0, MsisConstants.Mbf, izf + 10, gf, 0, MsisConstants.Mbf);
+                        dpro.Cf[izf] = DotProduct(Initialization.O1.Beta, 0, Constants.Mbf, izf + 10, gf, 0, Constants.Mbf);
                     }
                     break;
 
                 case 5: // Helium
-                    dpro.LnPhiF = MsisConstants.LnVmr[ispec]; // ispec=5, access LnVmr[5]
+                    dpro.LnPhiF = Constants.LnVmr[ispec]; // ispec=5, access LnVmr[5]
                     dpro.LnDRef = tpro.LnDTotF + dpro.LnPhiF;
-                    dpro.ZRef = MsisConstants.ZetaF;
+                    dpro.ZRef = Constants.ZetaF;
                     dpro.ZMin = -1.0;
-                    dpro.ZHyd = MsisConstants.ZetaF;
-                    dpro.ZetaM = MsisInit.HE.Beta[0, 1 - MsisInit.HE.Bl];
-                    dpro.HML = MsisInit.HE.Beta[0, 2 - MsisInit.HE.Bl];
-                    dpro.HMU = MsisInit.HE.Beta[0, 3 - MsisInit.HE.Bl];
-                    dpro.R = DotProduct(MsisInit.HE.Beta, 0, MsisConstants.Mbf, 7, gf, 0, MsisConstants.Mbf);
-                    dpro.R += MsisGfn.SFluxMod(7, gf, MsisInit.HE, 1.0);
-                    dpro.R += MsisGfn.GeoMag(ExtractGeomagParms(MsisInit.HE, 7), geomagBf1, geomagBf2);
-                    utdepParms = new double[MsisConstants.NUt];
-                    for (int idx = 0; idx < MsisConstants.NUt; idx++)
+                    dpro.ZHyd = Constants.ZetaF;
+                    dpro.ZetaM = Initialization.HE.Beta[0, 1 - Initialization.HE.Bl];
+                    dpro.HML = Initialization.HE.Beta[0, 2 - Initialization.HE.Bl];
+                    dpro.HMU = Initialization.HE.Beta[0, 3 - Initialization.HE.Bl];
+                    dpro.R = DotProduct(Initialization.HE.Beta, 0, Constants.Mbf, 7, gf, 0, Constants.Mbf);
+                    dpro.R += BasisFunctions.SFluxMod(7, gf, Initialization.HE, 1.0);
+                    dpro.R += BasisFunctions.GeoMag(ExtractGeomagParms(Initialization.HE, 7), geomagBf1, geomagBf2);
+                    utdepParms = new double[Constants.NUt];
+                    for (int idx = 0; idx < Constants.NUt; idx++)
                     {
-                        utdepParms[idx] = MsisInit.HE.Beta[MsisConstants.CUt + idx, 7 - MsisInit.HE.Bl];
+                        utdepParms[idx] = Initialization.HE.Beta[Constants.CUt + idx, 7 - Initialization.HE.Bl];
                     }
-                    dpro.R += MsisGfn.UtDep(utdepParms, utdepBf);
-                    dpro.ZetaR = MsisInit.HE.Beta[0, 8 - MsisInit.HE.Bl];
-                    dpro.HR = MsisInit.HE.Beta[0, 9 - MsisInit.HE.Bl];
+                    dpro.R += BasisFunctions.UtDep(utdepParms, utdepBf);
+                    dpro.ZetaR = Initialization.HE.Beta[0, 8 - Initialization.HE.Bl];
+                    dpro.HR = Initialization.HE.Beta[0, 9 - Initialization.HE.Bl];
                     break;
 
                 case 6: // Atomic Hydrogen
                     dpro.LnPhiF = 0.0;
-                    dpro.LnDRef = DotProduct(MsisInit.H1.Beta, 0, MsisConstants.Mbf, 0, gf, 0, MsisConstants.Mbf);
-                    dpro.ZRef = MsisConstants.ZetaA;
+                    dpro.LnDRef = DotProduct(Initialization.H1.Beta, 0, Constants.Mbf, 0, gf, 0, Constants.Mbf);
+                    dpro.ZRef = Constants.ZetaA;
                     dpro.ZMin = 75.0;
-                    dpro.ZHyd = MsisConstants.ZetaF;
-                    dpro.ZetaM = MsisInit.H1.Beta[0, 1 - MsisInit.H1.Bl];
-                    dpro.HML = MsisInit.H1.Beta[0, 2 - MsisInit.H1.Bl];
-                    dpro.HMU = MsisInit.H1.Beta[0, 3 - MsisInit.H1.Bl];
-                    dpro.C = DotProduct(MsisInit.H1.Beta, 0, MsisConstants.Mbf, 4, gf, 0, MsisConstants.Mbf);
-                    dpro.ZetaC = DotProduct(MsisInit.H1.Beta, 0, MsisConstants.Mbf, 5, gf, 0, MsisConstants.Mbf);
-                    dpro.HC = MsisInit.H1.Beta[0, 6 - MsisInit.H1.Bl];
-                    dpro.R = DotProduct(MsisInit.H1.Beta, 0, MsisConstants.Mbf, 7, gf, 0, MsisConstants.Mbf);
-                    dpro.R += MsisGfn.SFluxMod(7, gf, MsisInit.H1, 0.0);
-                    dpro.R += MsisGfn.GeoMag(ExtractGeomagParms(MsisInit.H1, 7), geomagBf1, geomagBf2);
-                    utdepParms = new double[MsisConstants.NUt];
-                    for (int idx = 0; idx < MsisConstants.NUt; idx++)
+                    dpro.ZHyd = Constants.ZetaF;
+                    dpro.ZetaM = Initialization.H1.Beta[0, 1 - Initialization.H1.Bl];
+                    dpro.HML = Initialization.H1.Beta[0, 2 - Initialization.H1.Bl];
+                    dpro.HMU = Initialization.H1.Beta[0, 3 - Initialization.H1.Bl];
+                    dpro.C = DotProduct(Initialization.H1.Beta, 0, Constants.Mbf, 4, gf, 0, Constants.Mbf);
+                    dpro.ZetaC = DotProduct(Initialization.H1.Beta, 0, Constants.Mbf, 5, gf, 0, Constants.Mbf);
+                    dpro.HC = Initialization.H1.Beta[0, 6 - Initialization.H1.Bl];
+                    dpro.R = DotProduct(Initialization.H1.Beta, 0, Constants.Mbf, 7, gf, 0, Constants.Mbf);
+                    dpro.R += BasisFunctions.SFluxMod(7, gf, Initialization.H1, 0.0);
+                    dpro.R += BasisFunctions.GeoMag(ExtractGeomagParms(Initialization.H1, 7), geomagBf1, geomagBf2);
+                    utdepParms = new double[Constants.NUt];
+                    for (int idx = 0; idx < Constants.NUt; idx++)
                     {
-                        utdepParms[idx] = MsisInit.H1.Beta[MsisConstants.CUt + idx, 7 - MsisInit.H1.Bl];
+                        utdepParms[idx] = Initialization.H1.Beta[Constants.CUt + idx, 7 - Initialization.H1.Bl];
                     }
-                    dpro.R += MsisGfn.UtDep(utdepParms, utdepBf);
-                    dpro.ZetaR = MsisInit.H1.Beta[0, 8 - MsisInit.H1.Bl];
-                    dpro.HR = MsisInit.H1.Beta[0, 9 - MsisInit.H1.Bl];
+                    dpro.R += BasisFunctions.UtDep(utdepParms, utdepBf);
+                    dpro.ZetaR = Initialization.H1.Beta[0, 8 - Initialization.H1.Bl];
+                    dpro.HR = Initialization.H1.Beta[0, 9 - Initialization.H1.Bl];
                     break;
 
                 case 7: // Argon
-                    dpro.LnPhiF = MsisConstants.LnVmr[ispec]; // ispec=7, access LnVmr[7]
+                    dpro.LnPhiF = Constants.LnVmr[ispec]; // ispec=7, access LnVmr[7]
                     dpro.LnDRef = tpro.LnDTotF + dpro.LnPhiF;
-                    dpro.ZRef = MsisConstants.ZetaF;
+                    dpro.ZRef = Constants.ZetaF;
                     dpro.ZMin = -1.0;
-                    dpro.ZHyd = MsisConstants.ZetaF;
-                    dpro.ZetaM = MsisInit.AR.Beta[0, 1 - MsisInit.AR.Bl];
-                    dpro.HML = MsisInit.AR.Beta[0, 2 - MsisInit.AR.Bl];
-                    dpro.HMU = MsisInit.AR.Beta[0, 3 - MsisInit.AR.Bl];
-                    dpro.R = DotProduct(MsisInit.AR.Beta, 0, MsisConstants.Mbf, 7, gf, 0, MsisConstants.Mbf);
-                    dpro.R += MsisGfn.GeoMag(ExtractGeomagParms(MsisInit.AR, 7), geomagBf1, geomagBf2);
-                    utdepParms = new double[MsisConstants.NUt];
-                    for (int idx = 0; idx < MsisConstants.NUt; idx++)
+                    dpro.ZHyd = Constants.ZetaF;
+                    dpro.ZetaM = Initialization.AR.Beta[0, 1 - Initialization.AR.Bl];
+                    dpro.HML = Initialization.AR.Beta[0, 2 - Initialization.AR.Bl];
+                    dpro.HMU = Initialization.AR.Beta[0, 3 - Initialization.AR.Bl];
+                    dpro.R = DotProduct(Initialization.AR.Beta, 0, Constants.Mbf, 7, gf, 0, Constants.Mbf);
+                    dpro.R += BasisFunctions.GeoMag(ExtractGeomagParms(Initialization.AR, 7), geomagBf1, geomagBf2);
+                    utdepParms = new double[Constants.NUt];
+                    for (int idx = 0; idx < Constants.NUt; idx++)
                     {
-                        utdepParms[idx] = MsisInit.AR.Beta[MsisConstants.CUt + idx, 7 - MsisInit.AR.Bl];
+                        utdepParms[idx] = Initialization.AR.Beta[Constants.CUt + idx, 7 - Initialization.AR.Bl];
                     }
-                    dpro.R += MsisGfn.UtDep(utdepParms, utdepBf);
-                    dpro.ZetaR = MsisInit.AR.Beta[0, 8 - MsisInit.AR.Bl];
-                    dpro.HR = MsisInit.AR.Beta[0, 9 - MsisInit.AR.Bl];
+                    dpro.R += BasisFunctions.UtDep(utdepParms, utdepBf);
+                    dpro.ZetaR = Initialization.AR.Beta[0, 8 - Initialization.AR.Bl];
+                    dpro.HR = Initialization.AR.Beta[0, 9 - Initialization.AR.Bl];
                     break;
 
                 case 8: // Atomic Nitrogen
                     dpro.LnPhiF = 0.0;
-                    dpro.LnDRef = DotProduct(MsisInit.N1.Beta, 0, MsisConstants.Mbf, 0, gf, 0, MsisConstants.Mbf);
-                    dpro.LnDRef += MsisGfn.SFluxMod(0, gf, MsisInit.N1, 0.0);
-                    dpro.LnDRef += MsisGfn.GeoMag(ExtractGeomagParms(MsisInit.N1, 0), geomagBf1, geomagBf2);
-                    utdepParms = new double[MsisConstants.NUt];
-                    for (int idx = 0; idx < MsisConstants.NUt; idx++)
+                    dpro.LnDRef = DotProduct(Initialization.N1.Beta, 0, Constants.Mbf, 0, gf, 0, Constants.Mbf);
+                    dpro.LnDRef += BasisFunctions.SFluxMod(0, gf, Initialization.N1, 0.0);
+                    dpro.LnDRef += BasisFunctions.GeoMag(ExtractGeomagParms(Initialization.N1, 0), geomagBf1, geomagBf2);
+                    utdepParms = new double[Constants.NUt];
+                    for (int idx = 0; idx < Constants.NUt; idx++)
                     {
-                        utdepParms[idx] = MsisInit.N1.Beta[MsisConstants.CUt + idx, 0 - MsisInit.N1.Bl];
+                        utdepParms[idx] = Initialization.N1.Beta[Constants.CUt + idx, 0 - Initialization.N1.Bl];
                     }
-                    dpro.LnDRef += MsisGfn.UtDep(utdepParms, utdepBf);
-                    dpro.ZRef = MsisConstants.ZetaB;
+                    dpro.LnDRef += BasisFunctions.UtDep(utdepParms, utdepBf);
+                    dpro.ZRef = Constants.ZetaB;
                     dpro.ZMin = 90.0;
-                    dpro.ZHyd = MsisConstants.ZetaF;
-                    dpro.ZetaM = MsisInit.N1.Beta[0, 1 - MsisInit.N1.Bl];
-                    dpro.HML = MsisInit.N1.Beta[0, 2 - MsisInit.N1.Bl];
-                    dpro.HMU = MsisInit.N1.Beta[0, 3 - MsisInit.N1.Bl];
-                    dpro.C = MsisInit.N1.Beta[0, 4 - MsisInit.N1.Bl];
-                    dpro.ZetaC = MsisInit.N1.Beta[0, 5 - MsisInit.N1.Bl];
-                    dpro.HC = MsisInit.N1.Beta[0, 6 - MsisInit.N1.Bl];
-                    dpro.R = DotProduct(MsisInit.N1.Beta, 0, MsisConstants.Mbf, 7, gf, 0, MsisConstants.Mbf);
-                    dpro.ZetaR = MsisInit.N1.Beta[0, 8 - MsisInit.N1.Bl];
-                    dpro.HR = MsisInit.N1.Beta[0, 9 - MsisInit.N1.Bl];
+                    dpro.ZHyd = Constants.ZetaF;
+                    dpro.ZetaM = Initialization.N1.Beta[0, 1 - Initialization.N1.Bl];
+                    dpro.HML = Initialization.N1.Beta[0, 2 - Initialization.N1.Bl];
+                    dpro.HMU = Initialization.N1.Beta[0, 3 - Initialization.N1.Bl];
+                    dpro.C = Initialization.N1.Beta[0, 4 - Initialization.N1.Bl];
+                    dpro.ZetaC = Initialization.N1.Beta[0, 5 - Initialization.N1.Bl];
+                    dpro.HC = Initialization.N1.Beta[0, 6 - Initialization.N1.Bl];
+                    dpro.R = DotProduct(Initialization.N1.Beta, 0, Constants.Mbf, 7, gf, 0, Constants.Mbf);
+                    dpro.ZetaR = Initialization.N1.Beta[0, 8 - Initialization.N1.Bl];
+                    dpro.HR = Initialization.N1.Beta[0, 9 - Initialization.N1.Bl];
                     break;
 
                 case 9: // Anomalous Oxygen
-                    dpro.LnDRef = DotProduct(MsisInit.OA.Beta, 0, MsisConstants.Mbf, 0, gf, 0, MsisConstants.Mbf);
-                    dpro.LnDRef += MsisGfn.GeoMag(ExtractGeomagParms(MsisInit.OA, 0), geomagBf1, geomagBf2);
-                    dpro.ZRef = MsisConstants.ZetaRefOA;
+                    dpro.LnDRef = DotProduct(Initialization.OA.Beta, 0, Constants.Mbf, 0, gf, 0, Constants.Mbf);
+                    dpro.LnDRef += BasisFunctions.GeoMag(ExtractGeomagParms(Initialization.OA, 0), geomagBf1, geomagBf2);
+                    dpro.ZRef = Constants.ZetaRefOA;
                     dpro.ZMin = 120.0;
                     dpro.ZHyd = 0.0;
-                    dpro.C = MsisInit.OA.Beta[0, 4 - MsisInit.OA.Bl];
-                    dpro.ZetaC = MsisInit.OA.Beta[0, 5 - MsisInit.OA.Bl];
-                    dpro.HC = MsisInit.OA.Beta[0, 6 - MsisInit.OA.Bl];
+                    dpro.C = Initialization.OA.Beta[0, 4 - Initialization.OA.Bl];
+                    dpro.ZetaC = Initialization.OA.Beta[0, 5 - Initialization.OA.Bl];
+                    dpro.HC = Initialization.OA.Beta[0, 6 - Initialization.OA.Bl];
                     return; // No further parameters needed for legacy anomalous oxygen profile
 
                 case 10: // Nitric Oxide
                     // Skip if parameters are not defined
-                    if (MsisInit.NO.Beta[0, 0 - MsisInit.NO.Bl] == 0.0)
+                    if (Initialization.NO.Beta[0, 0 - Initialization.NO.Bl] == 0.0)
                     {
                         dpro.LnDRef = 0.0;
                         return;
                     }
                     dpro.LnPhiF = 0.0;
-                    dpro.LnDRef = DotProduct(MsisInit.NO.Beta, 0, MsisConstants.Mbf, 0, gf, 0, MsisConstants.Mbf);
-                    dpro.LnDRef += MsisGfn.GeoMag(ExtractGeomagParms(MsisInit.NO, 0), geomagBf1, geomagBf2);
-                    dpro.ZRef = MsisConstants.ZetaRefNO;
+                    dpro.LnDRef = DotProduct(Initialization.NO.Beta, 0, Constants.Mbf, 0, gf, 0, Constants.Mbf);
+                    dpro.LnDRef += BasisFunctions.GeoMag(ExtractGeomagParms(Initialization.NO, 0), geomagBf1, geomagBf2);
+                    dpro.ZRef = Constants.ZetaRefNO;
                     dpro.ZMin = 72.5; // Cut off profile below 72.5 km
-                    dpro.ZHyd = MsisConstants.ZetaRefNO;
-                    dpro.ZetaM = DotProduct(MsisInit.NO.Beta, 0, MsisConstants.Mbf, 1, gf, 0, MsisConstants.Mbf);
-                    dpro.HML = DotProduct(MsisInit.NO.Beta, 0, MsisConstants.Mbf, 2, gf, 0, MsisConstants.Mbf);
-                    dpro.HMU = DotProduct(MsisInit.NO.Beta, 0, MsisConstants.Mbf, 3, gf, 0, MsisConstants.Mbf);
-                    dpro.C = DotProduct(MsisInit.NO.Beta, 0, MsisConstants.Mbf, 4, gf, 0, MsisConstants.Mbf);
-                    dpro.C += MsisGfn.GeoMag(ExtractGeomagParms(MsisInit.NO, 4), geomagBf1, geomagBf2);
-                    dpro.ZetaC = DotProduct(MsisInit.NO.Beta, 0, MsisConstants.Mbf, 5, gf, 0, MsisConstants.Mbf);
-                    dpro.HC = DotProduct(MsisInit.NO.Beta, 0, MsisConstants.Mbf, 6, gf, 0, MsisConstants.Mbf);
-                    dpro.R = DotProduct(MsisInit.NO.Beta, 0, MsisConstants.Mbf, 7, gf, 0, MsisConstants.Mbf);
-                    dpro.ZetaR = DotProduct(MsisInit.NO.Beta, 0, MsisConstants.Mbf, 8, gf, 0, MsisConstants.Mbf);
-                    dpro.HR = DotProduct(MsisInit.NO.Beta, 0, MsisConstants.Mbf, 9, gf, 0, MsisConstants.Mbf);
+                    dpro.ZHyd = Constants.ZetaRefNO;
+                    dpro.ZetaM = DotProduct(Initialization.NO.Beta, 0, Constants.Mbf, 1, gf, 0, Constants.Mbf);
+                    dpro.HML = DotProduct(Initialization.NO.Beta, 0, Constants.Mbf, 2, gf, 0, Constants.Mbf);
+                    dpro.HMU = DotProduct(Initialization.NO.Beta, 0, Constants.Mbf, 3, gf, 0, Constants.Mbf);
+                    dpro.C = DotProduct(Initialization.NO.Beta, 0, Constants.Mbf, 4, gf, 0, Constants.Mbf);
+                    dpro.C += BasisFunctions.GeoMag(ExtractGeomagParms(Initialization.NO, 4), geomagBf1, geomagBf2);
+                    dpro.ZetaC = DotProduct(Initialization.NO.Beta, 0, Constants.Mbf, 5, gf, 0, Constants.Mbf);
+                    dpro.HC = DotProduct(Initialization.NO.Beta, 0, Constants.Mbf, 6, gf, 0, Constants.Mbf);
+                    dpro.R = DotProduct(Initialization.NO.Beta, 0, Constants.Mbf, 7, gf, 0, Constants.Mbf);
+                    dpro.ZetaR = DotProduct(Initialization.NO.Beta, 0, Constants.Mbf, 8, gf, 0, Constants.Mbf);
+                    dpro.HR = DotProduct(Initialization.NO.Beta, 0, Constants.Mbf, 9, gf, 0, Constants.Mbf);
                     // Unconstrained splines
-                    for (izf = 0; izf < MsisConstants.NsplNO; izf++)
+                    for (izf = 0; izf < Constants.NsplNO; izf++)
                     {
-                        dpro.Cf[izf] = DotProduct(MsisInit.NO.Beta, 0, MsisConstants.Mbf, izf + 10, gf, 0, MsisConstants.Mbf);
-                        dpro.Cf[izf] += MsisGfn.GeoMag(ExtractGeomagParms(MsisInit.NO, izf + 10), geomagBf1, geomagBf2);
+                        dpro.Cf[izf] = DotProduct(Initialization.NO.Beta, 0, Constants.Mbf, izf + 10, gf, 0, Constants.Mbf);
+                        dpro.Cf[izf] += BasisFunctions.GeoMag(ExtractGeomagParms(Initialization.NO, izf + 10), geomagBf1, geomagBf2);
                     }
                     break;
 
@@ -317,10 +317,10 @@ namespace NRLMSIS
             dpro.ZetaMi[2] = dpro.ZetaM;
             dpro.ZetaMi[3] = dpro.ZetaM + dpro.HMU;
             dpro.ZetaMi[4] = dpro.ZetaM + 2.0 * dpro.HMU;
-            dpro.Mi[0] = MsisConstants.Mbar;
-            dpro.Mi[4] = MsisConstants.SpecMass[ispec]; // Access SpecMass with ispec directly (2-10)
+            dpro.Mi[0] = Constants.Mbar;
+            dpro.Mi[4] = Constants.SpecMass[ispec]; // Access SpecMass with ispec directly (2-10)
             dpro.Mi[2] = (dpro.Mi[0] + dpro.Mi[4]) / 2.0;
-            double delM = MsisConstants.Tanh1 * (dpro.Mi[4] - dpro.Mi[0]) / 2.0;
+            double delM = Constants.Tanh1 * (dpro.Mi[4] - dpro.Mi[0]) / 2.0;
             dpro.Mi[1] = dpro.Mi[2] - delM;
             dpro.Mi[3] = dpro.Mi[2] + delM;
             for (i = 0; i <= 3; i++)
@@ -330,10 +330,10 @@ namespace NRLMSIS
 
             for (i = 0; i <= 4; i++)
             {
-                double delz = dpro.ZetaMi[i] - MsisConstants.ZetaB;
-                if (dpro.ZetaMi[i] < MsisConstants.ZetaB)
+                double delz = dpro.ZetaMi[i] - Constants.ZetaB;
+                if (dpro.ZetaMi[i] < Constants.ZetaB)
                 {
-                    MsisUtils.BSpline(dpro.ZetaMi[i], MsisConstants.NodesTN, MsisConstants.Nd + 2, 6, MsisInit.EtaTN, out Si, out iz);
+                    Utilities.BSpline(dpro.ZetaMi[i], Constants.NodesTN, Constants.Nd + 2, 6, Initialization.EtaTN, out Si, out iz);
                     // Extract Si[-5:0, 6] -> Si[0:5, 4]
                     Wi = 0.0;
                     for (int j = 0; j <= 5; j++)
@@ -344,7 +344,7 @@ namespace NRLMSIS
                 }
                 else
                 {
-                    dpro.WMi[i] = (0.5 * delz * delz + MsisUtils.Dilog(tpro.B * Math.Exp(-tpro.Sigma * delz)) / tpro.SigmaSq) / tpro.Tex
+                    dpro.WMi[i] = (0.5 * delz * delz + Utilities.Dilog(tpro.B * Math.Exp(-tpro.Sigma * delz)) / tpro.SigmaSq) / tpro.Tex
                                 + tpro.CVb * delz + tpro.CWb;
                 }
             }
@@ -357,23 +357,23 @@ namespace NRLMSIS
             dpro.XMi[4] = dpro.XMi[3] + dpro.WMi[4] * dpro.AMi[3];
 
             // Calculate hydrostatic integral at reference height, and copy temperature
-            if (dpro.ZRef == MsisConstants.ZetaF)
+            if (dpro.ZRef == Constants.ZetaF)
             {
-                Mzref = MsisConstants.Mbar;
+                Mzref = Constants.Mbar;
                 dpro.TRef = tpro.TZetaF;
-                dpro.IzRef = MsisConstants.Mbar * tpro.VZetaF;
+                dpro.IzRef = Constants.Mbar * tpro.VZetaF;
             }
-            else if (dpro.ZRef == MsisConstants.ZetaB)
+            else if (dpro.ZRef == Constants.ZetaB)
             {
                 Mzref = Pwmp(dpro.ZRef, dpro.ZetaMi, dpro.Mi, dpro.AMi);
                 dpro.TRef = tpro.Tb0;
                 dpro.IzRef = 0.0;
-                if ((MsisConstants.ZetaB > dpro.ZetaMi[0]) && (MsisConstants.ZetaB < dpro.ZetaMi[4]))
+                if ((Constants.ZetaB > dpro.ZetaMi[0]) && (Constants.ZetaB < dpro.ZetaMi[4]))
                 {
                     i = 0;
                     for (i1 = 1; i1 <= 3; i1++)
                     {
-                        if (MsisConstants.ZetaB < dpro.ZetaMi[i1])
+                        if (Constants.ZetaB < dpro.ZetaMi[i1])
                         {
                             break;
                         }
@@ -389,17 +389,17 @@ namespace NRLMSIS
                     dpro.IzRef = dpro.IzRef - dpro.XMi[4];
                 }
             }
-            else if (dpro.ZRef == MsisConstants.ZetaA)
+            else if (dpro.ZRef == Constants.ZetaA)
             {
                 Mzref = Pwmp(dpro.ZRef, dpro.ZetaMi, dpro.Mi, dpro.AMi);
                 dpro.TRef = tpro.TZetaA;
                 dpro.IzRef = Mzref * tpro.VZetaA;
-                if ((MsisConstants.ZetaA > dpro.ZetaMi[0]) && (MsisConstants.ZetaA < dpro.ZetaMi[4]))
+                if ((Constants.ZetaA > dpro.ZetaMi[0]) && (Constants.ZetaA < dpro.ZetaMi[4]))
                 {
                     i = 0;
                     for (i1 = 1; i1 <= 3; i1++)
                     {
-                        if (MsisConstants.ZetaA < dpro.ZetaMi[i1])
+                        if (Constants.ZetaA < dpro.ZetaMi[i1])
                         {
                             break;
                         }
@@ -424,21 +424,21 @@ namespace NRLMSIS
             if (ispec == 4)
             {
                 Cterm = dpro.C * Math.Exp(-(dpro.ZRef - dpro.ZetaC) / dpro.HC);
-                Rterm0 = Math.Tanh((dpro.ZRef - dpro.ZetaR) / (MsisInit.HRFactO1Ref * dpro.HR));
+                Rterm0 = Math.Tanh((dpro.ZRef - dpro.ZetaR) / (Initialization.HRFactO1Ref * dpro.HR));
                 Rterm = dpro.R * (1 + Rterm0);
-                bc[0] = dpro.LnDRef - Cterm + Rterm - dpro.Cf[7] * MsisConstants.C1O1Adj[0];
-                bc[1] = -Mzref * MsisConstants.G0DivKB / tpro.TZetaA
+                bc[0] = dpro.LnDRef - Cterm + Rterm - dpro.Cf[7] * Constants.C1O1Adj[0];
+                bc[1] = -Mzref * Constants.G0DivKB / tpro.TZetaA
                         - tpro.DlnTdzA
                         + Cterm / dpro.HC
-                        + Rterm * (1 - Rterm0) / dpro.HR * MsisInit.DHRFactO1Ref
-                        - dpro.Cf[7] * MsisConstants.C1O1Adj[1];
+                        + Rterm * (1 - Rterm0) / dpro.HR * Initialization.DHRFactO1Ref
+                        - dpro.Cf[7] * Constants.C1O1Adj[1];
                 // Compute coefficients for constrained splines: bc * c1o1
                 for (int idx = 8; idx <= 9; idx++)
                 {
                     dpro.Cf[idx] = 0.0;
                     for (int row = 0; row < 2; row++)
                     {
-                        dpro.Cf[idx] += bc[row] * MsisConstants.C1O1[row, idx - 8];
+                        dpro.Cf[idx] += bc[row] * Constants.C1O1[row, idx - 8];
                     }
                 }
             }
@@ -447,21 +447,21 @@ namespace NRLMSIS
             if (ispec == 10)
             {
                 Cterm = dpro.C * Math.Exp(-(dpro.ZRef - dpro.ZetaC) / dpro.HC);
-                Rterm0 = Math.Tanh((dpro.ZRef - dpro.ZetaR) / (MsisInit.HRFactNORef * dpro.HR));
+                Rterm0 = Math.Tanh((dpro.ZRef - dpro.ZetaR) / (Initialization.HRFactNORef * dpro.HR));
                 Rterm = dpro.R * (1 + Rterm0);
-                bc[0] = dpro.LnDRef - Cterm + Rterm - dpro.Cf[7] * MsisConstants.C1NOAdj[0];
-                bc[1] = -Mzref * MsisConstants.G0DivKB / tpro.Tb0
+                bc[0] = dpro.LnDRef - Cterm + Rterm - dpro.Cf[7] * Constants.C1NOAdj[0];
+                bc[1] = -Mzref * Constants.G0DivKB / tpro.Tb0
                         - tpro.Tgb0 / tpro.Tb0
                         + Cterm / dpro.HC
-                        + Rterm * (1 - Rterm0) / dpro.HR * MsisInit.DHRFactNORef
-                        - dpro.Cf[7] * MsisConstants.C1NOAdj[1];
+                        + Rterm * (1 - Rterm0) / dpro.HR * Initialization.DHRFactNORef
+                        - dpro.Cf[7] * Constants.C1NOAdj[1];
                 // Compute coefficients for constrained splines: bc * c1NO
                 for (int idx = 8; idx <= 9; idx++)
                 {
                     dpro.Cf[idx] = 0.0;
                     for (int row = 0; row < 2; row++)
                     {
-                        dpro.Cf[idx] += bc[row] * MsisConstants.C1NO[row, idx - 8];
+                        dpro.Cf[idx] += bc[row] * Constants.C1NO[row, idx - 8];
                     }
                 }
             }
@@ -483,7 +483,7 @@ namespace NRLMSIS
         /// <param name="dpro">Density vertical profile parameters</param>
         /// <returns>Species density (m^-3)</returns>
         public static double DfnX(double z, double tnz, double lndtotz, double Vz, double Wz,
-                                 double HRfact, TnParm tpro, DnParm dpro)
+                                 double HRfact, TemperatureProfile tpro, DensityParameters dpro)
         {
             int i, i1, iz;
             double Mz;
@@ -495,13 +495,13 @@ namespace NRLMSIS
             // Below minimum height of profile
             if (z < dpro.ZMin)
             {
-                return MsisConstants.DMissing;
+                return Constants.DMissing;
             }
 
             // Anomalous Oxygen (legacy MSISE-00 formulation)
             if (dpro.ISpec == 9)
             {
-                dfnx = dpro.LnDRef - (z - dpro.ZRef) / MsisConstants.HOA - dpro.C * Math.Exp(-(z - dpro.ZetaC) / dpro.HC);
+                dfnx = dpro.LnDRef - (z - dpro.ZRef) / Constants.HOA - dpro.C * Math.Exp(-(z - dpro.ZetaC) / dpro.HC);
                 return Math.Exp(dfnx);
             }
 
@@ -510,7 +510,7 @@ namespace NRLMSIS
             {
                 if (dpro.LnDRef == 0.0)
                 {
-                    return MsisConstants.DMissing;
+                    return Constants.DMissing;
                 }
             }
 
@@ -547,7 +547,7 @@ namespace NRLMSIS
                         return Math.Exp(lndtotz + dpro.LnPhiF + ccor);
 
                     case 4: // For O, evaluate splines
-                        MsisUtils.BSpline(z, MsisConstants.NodesO1, MsisConstants.NdO1, 4, MsisInit.EtaO1, out Sz, out iz);
+                        Utilities.BSpline(z, Constants.NodesO1, Constants.NdO1, 4, Initialization.EtaO1, out Sz, out iz);
                         // Fortran: dot_product(dpro%cf(iz-3:iz), Sz(-3:0,4))
                         // Sz(-3:0,4) maps to Sz[2:5, 2] (order 4 -> index 2)
                         dfnx = 0.0;
@@ -558,7 +558,7 @@ namespace NRLMSIS
                         return Math.Exp(dfnx);
 
                     case 10: // For NO, evaluate splines
-                        MsisUtils.BSpline(z, MsisConstants.NodesNO, MsisConstants.NdNO, 4, MsisInit.EtaNO, out Sz, out iz);
+                        Utilities.BSpline(z, Constants.NodesNO, Constants.NdNO, 4, Initialization.EtaNO, out Sz, out iz);
                         // Fortran: dot_product(dpro%cf(iz-3:iz), Sz(-3:0,4))
                         // Sz(-3:0,4) maps to Sz[2:5, 2] (order 4 -> index 2)
                         dfnx = 0.0;
@@ -594,7 +594,7 @@ namespace NRLMSIS
                 Ihyd = Ihyd - dpro.XMi[4];
             }
 
-            dfnx = dpro.LnDRef - Ihyd * MsisConstants.G0DivKB + ccor;
+            dfnx = dpro.LnDRef - Ihyd * Constants.G0DivKB + ccor;
 
             // Apply ideal gas law
             dfnx = Math.Exp(dfnx) * dpro.TRef / tnz;
@@ -641,21 +641,21 @@ namespace NRLMSIS
         {
             double sum = 0.0;
             int gfIdx = gfStart;
-            
+
             // Determine which subset this is to get the correct Bl offset
             int blOffset = 0;
-            if (beta == MsisInit.TN.Beta) blOffset = MsisInit.TN.Bl;
-            else if (beta == MsisInit.PR.Beta) blOffset = MsisInit.PR.Bl;
-            else if (beta == MsisInit.N2.Beta) blOffset = MsisInit.N2.Bl;
-            else if (beta == MsisInit.O2.Beta) blOffset = MsisInit.O2.Bl;
-            else if (beta == MsisInit.O1.Beta) blOffset = MsisInit.O1.Bl;
-            else if (beta == MsisInit.HE.Beta) blOffset = MsisInit.HE.Bl;
-            else if (beta == MsisInit.H1.Beta) blOffset = MsisInit.H1.Bl;
-            else if (beta == MsisInit.AR.Beta) blOffset = MsisInit.AR.Bl;
-            else if (beta == MsisInit.N1.Beta) blOffset = MsisInit.N1.Bl;
-            else if (beta == MsisInit.OA.Beta) blOffset = MsisInit.OA.Bl;
-            else if (beta == MsisInit.NO.Beta) blOffset = MsisInit.NO.Bl;
-            
+            if (beta == Initialization.TN.Beta) blOffset = Initialization.TN.Bl;
+            else if (beta == Initialization.PR.Beta) blOffset = Initialization.PR.Bl;
+            else if (beta == Initialization.N2.Beta) blOffset = Initialization.N2.Bl;
+            else if (beta == Initialization.O2.Beta) blOffset = Initialization.O2.Bl;
+            else if (beta == Initialization.O1.Beta) blOffset = Initialization.O1.Bl;
+            else if (beta == Initialization.HE.Beta) blOffset = Initialization.HE.Bl;
+            else if (beta == Initialization.H1.Beta) blOffset = Initialization.H1.Bl;
+            else if (beta == Initialization.AR.Beta) blOffset = Initialization.AR.Bl;
+            else if (beta == Initialization.N1.Beta) blOffset = Initialization.N1.Bl;
+            else if (beta == Initialization.OA.Beta) blOffset = Initialization.OA.Bl;
+            else if (beta == Initialization.NO.Beta) blOffset = Initialization.NO.Bl;
+
             for (int i = betaRowStart; i <= betaRowEnd; i++)
             {
                 sum += beta[i, betaCol - blOffset] * gf[gfIdx];

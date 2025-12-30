@@ -13,7 +13,7 @@
 // ===========================================================================
 
 // ==================================================================================================
-// MSISTEST: Test program for NRLMSIS 2.1
+// Testing: Test program for NRLMSIS 2.1
 // ==================================================================================================
 
 using System;
@@ -22,7 +22,7 @@ using System.Globalization;
 
 namespace NRLMSIS
 {
-    class MsisTest
+    class Testing
     {
         static void Main(string[] args)
         {
@@ -35,13 +35,13 @@ namespace NRLMSIS
             string dummy;
 
             // Initialize model, set the path here.
-            MsisInit.MsisInitialize(parmPath: "", parmFile: "msis21.parm");
+            Initialization.Initializationialize(parmPath: "../", parmFile: "msis21.parm");
 
             // Open input and output files, loop through records, and call model
             try
             {
-                using (StreamReader reader = new StreamReader("msis2.1_test_in.txt"))
-                using (StreamWriter writer = new StreamWriter("msis2.1_test_out.txt"))
+                using (StreamReader reader = new StreamReader("../msis2.1_test_in.txt"))
+                using (StreamWriter writer = new StreamWriter("../msis2.1_test_out.txt"))
                 {
                     // Read and skip header line
                     dummy = reader.ReadLine();
@@ -75,7 +75,7 @@ namespace NRLMSIS
                         ap[0] = apd;
 
                         // Call legacy interface (gtd8d)
-                        Gtd8d.Calculate(iyd, sec, alt, glat, glong, stl, f107a, f107, ap, mass, out d, out t);
+                        LegacyInterface.Calculate(iyd, sec, alt, glat, glong, stl, f107a, f107, ap, mass, out d, out t);
 
                         // Write output line
                         // Format: 2 integers (7 chars), 3 floats (7.1), 1 float (7.2), 3 floats (7.1),

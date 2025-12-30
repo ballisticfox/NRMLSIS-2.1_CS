@@ -15,7 +15,7 @@
 // REFACTORED MSISCALC: Improved version with thread-safety, validation, and readability
 //
 // Key improvements over original:
-// - Thread-safe: Uses MsisContext instead of static state
+// - Thread-safe: Uses Context instead of static state
 // - Input validation: Clear error messages for invalid inputs
 // - Readable: Helper methods and named constants instead of magic numbers
 // - Maintainable: Separated concerns and better documentation
@@ -31,7 +31,7 @@ namespace NRLMSIS
     /// This is a refactored version of the original MsisCalc that uses context objects
     /// for thread-safe caching and provides better error handling.
     /// </summary>
-    public static class MsisCalc
+    public static class MSISCalculator
     {
         // ==================================================================================================
         // CALCULATE: Main calculation method with context for thread-safety
@@ -66,7 +66,7 @@ namespace NRLMSIS
         ///   [9] NO number density (m⁻³)
         ///
         /// Missing values are returned as 9.999e-38.
-        /// Species calculated are determined by MsisInit configuration.
+        /// Species calculated are determined by Initialization configuration.
         /// </remarks>
         /// <exception cref="ArgumentOutOfRangeException">
         /// Thrown when any input parameter is outside valid range.
@@ -80,7 +80,7 @@ namespace NRLMSIS
         public static void Calculate(
             double day, double utsec, double z, double lat, double lon,
             double sfluxavg, double sflux, double[] ap,
-            MsisContext context,
+            Context context,
             out double tn, out double[] dn, out double tex)
         {
             // Validate initialization
@@ -95,8 +95,8 @@ namespace NRLMSIS
             tn = 0.0;
 
             // Convert altitude to geopotential height if needed
-            double geopotentialHeight = MsisInit.ZAltFlag
-                ? MsisUtils.Alt2Gph(lat, z)
+            double geopotentialHeight = Initialization.ZAltFlag
+                ? Utilities.Alt2Gph(lat, z)
                 : z;
 
             // Check if we need to recalculate basis functions
@@ -107,7 +107,7 @@ namespace NRLMSIS
             if (needsProfileUpdate)
             {
                 // Calculate horizontal and temporal basis functions
-                MsisGfn.Globe(day, utsec, lat, lon, sfluxavg, sflux, ap,
+                BasisFunctions.Globe(day, utsec, lat, lon, sfluxavg, sflux, ap,
                             out double[] gf);
 
                 // Copy to context cache
@@ -122,9 +122,9 @@ namespace NRLMSIS
                 // Calculate density profile parameters for each species
                 for (int ispec = 2; ispec <= 10; ispec++)
                 {
-                    if (MsisInit.SpecFlag[ispec - 1])
+                    if (Initialization.SpecFlag[ispec - 1])
                     {
-                        MsisDfn.DfnParm(ispec, context.BasisFunctions,
+                        DensityProfile.DfnParm(ispec, context.BasisFunctions,
                                        context.TemperatureProfile,
                                        out var dpro);
                         CopyDensityProfile(dpro, context.DensityProfiles[ispec]);
@@ -147,12 +147,12 @@ namespace NRLMSIS
                     int maxOrder = geopotentialHeight < AltitudeRegimes.ZetaF ? 5 : 6;
 
                     // Calculate B-spline weights
-                    MsisUtils.BSpline(
+                    Utilities.BSpline(
                         geopotentialHeight,
-                        MsisConstants.NodesTN,
-                        MsisConstants.Nd + 2,
+                        Constants.NodesTN,
+                        Constants.Nd + 2,
                         maxOrder,
-                        MsisInit.EtaTN,
+                        Initialization.EtaTN,
                         out double[,] splineWeights,
                         out int splineIndex);
 
@@ -181,14 +181,14 @@ namespace NRLMSIS
         /// <summary>
         /// Calculate MSIS atmospheric parameters without explicit context.
         /// A temporary context is created for this calculation.
-        /// For multi-threaded use or repeated calculations, use the overload with MsisContext.
+        /// For multi-threaded use or repeated calculations, use the overload with Context.
         /// </summary>
         public static void Calculate(
             double day, double utsec, double z, double lat, double lon,
             double sfluxavg, double sflux, double[] ap,
             out double tn, out double[] dn, out double tex)
         {
-            using var context = new MsisContext();
+            using var context = new Context();
             Calculate(day, utsec, z, lat, lon, sfluxavg, sflux, ap,
                      context, out tn, out dn, out tex);
         }
@@ -202,7 +202,7 @@ namespace NRLMSIS
         public static void Calculate(
             double day, double utsec, double z, double lat, double lon,
             double sfluxavg, double sflux, double[] ap,
-            MsisContext context,
+            Context context,
             out double tn, out double[] dn)
         {
             Calculate(day, utsec, z, lat, lon, sfluxavg, sflux, ap,
@@ -216,7 +216,7 @@ namespace NRLMSIS
         /// <summary>
         /// Calculates temperature at the specified altitude using cached profile parameters.
         /// </summary>
-        private static double CalculateTemperature(double altitude, MsisContext context)
+        private static double CalculateTemperature(double altitude, Context context)
         {
             // Extract spline weights for temperature calculation (order 4 = cubic)
             // Fortran: Sz(-3:0, 4) maps to C# Sz[2:5, 2]
@@ -237,7 +237,7 @@ namespace NRLMSIS
         private static void CalculateDensities(
             double altitude,
             double temperature,
-            MsisContext context,
+            Context context,
             double[] densities)
         {
             var tpro = context.TemperatureProfile;
@@ -272,33 +272,33 @@ namespace NRLMSIS
             // Calculate number densities for each species (2-10)
             for (int ispec = 2; ispec <= 10; ispec++)
             {
-                if (MsisInit.SpecFlag[ispec - 1])
+                if (Initialization.SpecFlag[ispec - 1])
                 {
-                    densities[ispec - 1] = MsisDfn.DfnX(
+                    densities[ispec - 1] = DensityProfile.DfnX(
                         altitude, temperature, lndtotz, Vz, Wz, taperFactor,
                         tpro, context.DensityProfiles[ispec]);
                 }
                 else
                 {
-                    densities[ispec - 1] = MsisConstants.DMissing;
+                    densities[ispec - 1] = Constants.DMissing;
                 }
             }
 
             // Calculate total mass density if enabled
-            if (MsisInit.SpecFlag[0])
+            if (Initialization.SpecFlag[0])
             {
                 densities[0] = 0.0;
                 for (int idx = 1; idx < 10; idx++)
                 {
-                    if (densities[idx] != MsisConstants.DMissing)
+                    if (densities[idx] != Constants.DMissing)
                     {
-                        densities[0] += densities[idx] * MsisInit.MassWgt[idx];
+                        densities[0] += densities[idx] * Initialization.MassWgt[idx];
                     }
                 }
             }
             else
             {
-                densities[0] = MsisConstants.DMissing;
+                densities[0] = Constants.DMissing;
             }
         }
 
@@ -308,7 +308,7 @@ namespace NRLMSIS
         private static void CalculateIntegralsLowAltitude(
             double altitude,
             double temperature,
-            MsisContext context,
+            Context context,
             out double lnTotalDensity,
             out double firstIntegral,
             out double secondIntegral)
@@ -333,9 +333,9 @@ namespace NRLMSIS
             secondIntegral = 0.0;
 
             // Calculate log pressure and total number density
-            double lnPressure = MsisConstants.LnP0 -
-                MsisConstants.MbarG0DivKB * (firstIntegral - tpro.VZeta0);
-            lnTotalDensity = lnPressure - Math.Log(MsisConstants.KB * temperature);
+            double lnPressure = Constants.LnP0 -
+                Constants.MbarG0DivKB * (firstIntegral - tpro.VZeta0);
+            lnTotalDensity = lnPressure - Math.Log(Constants.KB * temperature);
         }
 
         /// <summary>
@@ -344,7 +344,7 @@ namespace NRLMSIS
         private static void CalculateIntegralsMidAltitude(
             double altitude,
             double temperature,
-            MsisContext context,
+            Context context,
             out double lnTotalDensity,
             out double firstIntegral,
             out double secondIntegral)
@@ -380,7 +380,7 @@ namespace NRLMSIS
             double altitude,
             double temperature,
             double delz,
-            TnParm tpro,
+            TemperatureProfile tpro,
             out double lnTotalDensity,
             out double firstIntegral,
             out double secondIntegral)
@@ -390,7 +390,7 @@ namespace NRLMSIS
                           + tpro.CVb;
 
             secondIntegral = (0.5 * delz * delz +
-                            MsisUtils.Dilog(tpro.B * Math.Exp(-tpro.Sigma * delz)) / tpro.SigmaSq)
+                            Utilities.Dilog(tpro.B * Math.Exp(-tpro.Sigma * delz)) / tpro.SigmaSq)
                            / tpro.Tex + tpro.CVb * delz + tpro.CWb;
 
             // Log total density not used in this region
@@ -400,7 +400,7 @@ namespace NRLMSIS
         /// <summary>
         /// Deep copies temperature profile parameters.
         /// </summary>
-        private static void CopyTemperatureProfile(TnParm source, TnParm dest)
+        private static void CopyTemperatureProfile(TemperatureProfile source, TemperatureProfile dest)
         {
             Array.Copy(source.Cf, dest.Cf, source.Cf.Length);
             Array.Copy(source.Beta, dest.Beta, source.Beta.Length);
@@ -429,7 +429,7 @@ namespace NRLMSIS
         /// <summary>
         /// Deep copies density profile parameters.
         /// </summary>
-        private static void CopyDensityProfile(DnParm source, DnParm dest)
+        private static void CopyDensityProfile(DensityParameters source, DensityParameters dest)
         {
             if (source.Cf != null && dest.Cf != null)
             {

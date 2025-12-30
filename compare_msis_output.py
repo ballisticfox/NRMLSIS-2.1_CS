@@ -163,4 +163,4 @@ if __name__ == '__main__':
     #     print("Example: python compare_msis_output.py msis2.1_test_ref_dp.txt msis2.1_test_out.txt")
     #     sys.exit(1)
     
-    compare_files("msis2.1_test_ref_dp.txt", "NRMLSIS/msis2.1_test_out.txt", "msis2.1_test_compare.txt")
+    compare_files("msis2.1_test_ref_dp.txt", "msis2.1_test_out.txt", "msis2.1_test_compare.txt")

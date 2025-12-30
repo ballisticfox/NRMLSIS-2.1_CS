@@ -25,11 +25,11 @@ namespace NRLMSIS
     /// - Improves cache locality by grouping related data
     ///
     /// Thread safety:
-    /// - Each thread should have its own MsisContext instance
+    /// - Each thread should have its own Context instance
     /// - Do NOT share a single context across multiple threads
     /// - For parallel calculations, create one context per thread
     /// </remarks>
-    public sealed class MsisContext : IDisposable
+    public sealed class Context : IDisposable
     {
         // ===== Cached Input Parameters =====
 
@@ -60,7 +60,7 @@ namespace NRLMSIS
         // ===== Cached Computed Values =====
 
         /// <summary>Cached horizontal and temporal basis functions (gf array)</summary>
-        private readonly double[] _basisFunctions = new double[MsisConstants.MaxNbf];
+        private readonly double[] _basisFunctions = new double[Constants.MaxNbf];
 
         /// <summary>Cached B-spline weights for current altitude</summary>
         private readonly double[,] _splineWeights = new double[6, 5];
@@ -69,10 +69,10 @@ namespace NRLMSIS
         private int _splineIndex;
 
         /// <summary>Cached temperature profile parameters</summary>
-        private TnParm _temperatureProfile = new TnParm();
+        private TemperatureProfile _temperatureProfile = new TemperatureProfile();
 
         /// <summary>Cached density profile parameters for each species</summary>
-        private readonly DnParm[] _densityProfiles = new DnParm[MsisConstants.NSpec];
+        private readonly DensityParameters[] _densityProfiles = new DensityParameters[Constants.NSpec];
 
         // ===== Reusable Buffers (to avoid allocations) =====
 
@@ -90,12 +90,12 @@ namespace NRLMSIS
         /// <summary>
         /// Creates a new computation context with cleared cache.
         /// </summary>
-        public MsisContext()
+        public Context()
         {
             // Initialize density profiles array
             for (int i = 0; i < _densityProfiles.Length; i++)
             {
-                _densityProfiles[i] = new DnParm();
+                _densityProfiles[i] = new DensityParameters();
             }
 
             // Initialize lastAp with sentinel values
@@ -186,10 +186,10 @@ namespace NRLMSIS
         }
 
         /// <summary>Gets the cached temperature profile parameters (read-write access)</summary>
-        public TnParm TemperatureProfile => _temperatureProfile;
+        public TemperatureProfile TemperatureProfile => _temperatureProfile;
 
         /// <summary>Gets the cached density profile parameters array (read-write access)</summary>
-        public DnParm[] DensityProfiles => _densityProfiles;
+        public DensityParameters[] DensityProfiles => _densityProfiles;
 
         // ===== Accessors for Reusable Buffers =====
 
@@ -232,10 +232,10 @@ namespace NRLMSIS
             Array.Clear(_splineWeights, 0, _splineWeights.Length);
             _splineIndex = 0;
 
-            _temperatureProfile = new TnParm();
+            _temperatureProfile = new TemperatureProfile();
             for (int i = 0; i < _densityProfiles.Length; i++)
             {
-                _densityProfiles[i] = new DnParm();
+                _densityProfiles[i] = new DensityParameters();
             }
         }
 

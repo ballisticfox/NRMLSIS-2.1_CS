@@ -20,24 +20,24 @@ namespace NRLMSIS
         // Valid ranges for input parameters
         private const double MinDayOfYear = 1.0;
         private const double MaxDayOfYear = 366.0;
-        
+
         private const double MinUniversalTime = 0.0;
         private const double MaxUniversalTime = 86400.0;
-        
+
         private const double MinAltitude = -5.0;   // Slightly below sea level
         private const double MaxAltitude = 1000.0; // Upper limit of model validity
-        
+
         private const double MinLatitude = -90.0;
         private const double MaxLatitude = 90.0;
-        
+
         private const double MinLongitude = -180.0;
         private const double MaxLongitude = 360.0;  // Allow both -180:180 and 0:360
-        
+
         private const double MinF107 = 0.0;
         private const double MaxF107 = 500.0;  // Extremely high, but physically possible
-        
+
         private const int RequiredApLength = 7;
-        
+
         /// <summary>
         /// Validates all input parameters for a MSIS calculation.
         /// </summary>
@@ -66,7 +66,7 @@ namespace NRLMSIS
             ValidateF107Daily(sflux);
             ValidateApArray(ap);
         }
-        
+
         /// <summary>
         /// Validates day of year parameter.
         /// </summary>
@@ -82,14 +82,14 @@ namespace NRLMSIS
                     "Day of year cannot be NaN",
                     nameof(day));
             }
-            
+
             if (double.IsInfinity(day))
             {
                 throw new ArgumentException(
                     "Day of year cannot be infinite",
                     nameof(day));
             }
-            
+
             if (day < MinDayOfYear || day > MaxDayOfYear)
             {
                 throw new ArgumentOutOfRangeException(
@@ -100,7 +100,7 @@ namespace NRLMSIS
                     $"Fractional days are allowed (e.g., 172.5 for noon on day 172).");
             }
         }
-        
+
         /// <summary>
         /// Validates universal time parameter.
         /// </summary>
@@ -116,14 +116,14 @@ namespace NRLMSIS
                     "Universal time cannot be NaN",
                     nameof(utsec));
             }
-            
+
             if (double.IsInfinity(utsec))
             {
                 throw new ArgumentException(
                     "Universal time cannot be infinite",
                     nameof(utsec));
             }
-            
+
             if (utsec < MinUniversalTime || utsec >= MaxUniversalTime)
             {
                 throw new ArgumentOutOfRangeException(
@@ -133,7 +133,7 @@ namespace NRLMSIS
                     $"Note: 86400 seconds = 24 hours. For times >= 86400, consider incrementing the day.");
             }
         }
-        
+
         /// <summary>
         /// Validates altitude parameter.
         /// </summary>
@@ -149,14 +149,14 @@ namespace NRLMSIS
                     "Altitude cannot be NaN",
                     nameof(altitude));
             }
-            
+
             if (double.IsInfinity(altitude))
             {
                 throw new ArgumentException(
                     "Altitude cannot be infinite",
                     nameof(altitude));
             }
-            
+
             if (altitude < MinAltitude || altitude > MaxAltitude)
             {
                 throw new ArgumentOutOfRangeException(
@@ -166,7 +166,7 @@ namespace NRLMSIS
                     $"The MSIS model is valid from the Earth's surface up to ~1000 km. " +
                     $"For altitudes > 1000 km, results may be less accurate.");
             }
-            
+
             // Warning for altitudes above typical thermosphere
             if (altitude > 600)
             {
@@ -174,7 +174,7 @@ namespace NRLMSIS
                 // For now, just allow it to proceed
             }
         }
-        
+
         /// <summary>
         /// Validates latitude parameter.
         /// </summary>
@@ -190,14 +190,14 @@ namespace NRLMSIS
                     "Latitude cannot be NaN",
                     nameof(latitude));
             }
-            
+
             if (double.IsInfinity(latitude))
             {
                 throw new ArgumentException(
                     "Latitude cannot be infinite",
                     nameof(latitude));
             }
-            
+
             if (latitude < MinLatitude || latitude > MaxLatitude)
             {
                 throw new ArgumentOutOfRangeException(
@@ -208,7 +208,7 @@ namespace NRLMSIS
                     $"For example: 45.0 = 45°N, -30.0 = 30°S");
             }
         }
-        
+
         /// <summary>
         /// Validates longitude parameter.
         /// </summary>
@@ -224,14 +224,14 @@ namespace NRLMSIS
                     "Longitude cannot be NaN",
                     nameof(longitude));
             }
-            
+
             if (double.IsInfinity(longitude))
             {
                 throw new ArgumentException(
                     "Longitude cannot be infinite",
                     nameof(longitude));
             }
-            
+
             // Accept both -180:180 and 0:360 conventions
             if (longitude < MinLongitude || longitude > MaxLongitude)
             {
@@ -244,7 +244,7 @@ namespace NRLMSIS
                     $"For example: -122.0 = 122°W, 238.0 = 122°W (equivalent)");
             }
         }
-        
+
         /// <summary>
         /// Validates F10.7 average flux parameter.
         /// </summary>
@@ -260,14 +260,14 @@ namespace NRLMSIS
                     "F10.7 average cannot be NaN",
                     nameof(f107avg));
             }
-            
+
             if (double.IsInfinity(f107avg))
             {
                 throw new ArgumentException(
                     "F10.7 average cannot be infinite",
                     nameof(f107avg));
             }
-            
+
             if (f107avg < MinF107 || f107avg > MaxF107)
             {
                 throw new ArgumentOutOfRangeException(
@@ -279,7 +279,7 @@ namespace NRLMSIS
                     $"Note: Use the observed flux at Earth distance, not adjusted to 1 AU.");
             }
         }
-        
+
         /// <summary>
         /// Validates F10.7 daily flux parameter.
         /// </summary>
@@ -295,14 +295,14 @@ namespace NRLMSIS
                     "F10.7 daily cannot be NaN",
                     nameof(f107));
             }
-            
+
             if (double.IsInfinity(f107))
             {
                 throw new ArgumentException(
                     "F10.7 daily cannot be infinite",
                     nameof(f107));
             }
-            
+
             if (f107 < MinF107 || f107 > MaxF107)
             {
                 throw new ArgumentOutOfRangeException(
@@ -313,7 +313,7 @@ namespace NRLMSIS
                     $"Note: Use the observed flux at Earth distance, not adjusted to 1 AU.");
             }
         }
-        
+
         /// <summary>
         /// Validates Ap geomagnetic activity index array.
         /// </summary>
@@ -332,7 +332,7 @@ namespace NRLMSIS
                     nameof(ap),
                     "Ap array cannot be null. It must contain 7 geomagnetic activity indices.");
             }
-            
+
             if (ap.Length != RequiredApLength)
             {
                 throw new ArgumentException(
@@ -347,7 +347,7 @@ namespace NRLMSIS
                     $"  [6] Average of eight 3-hour ap indices from 36-57 hours prior",
                     nameof(ap));
             }
-            
+
             // Validate each Ap value
             for (int i = 0; i < ap.Length; i++)
             {
@@ -357,14 +357,14 @@ namespace NRLMSIS
                         $"Ap[{i}] cannot be NaN",
                         nameof(ap));
                 }
-                
+
                 if (double.IsInfinity(ap[i]))
                 {
                     throw new ArgumentException(
                         $"Ap[{i}] cannot be infinite",
                         nameof(ap));
                 }
-                
+
                 if (ap[i] < 0 || ap[i] > 400)
                 {
                     throw new ArgumentOutOfRangeException(
@@ -376,7 +376,7 @@ namespace NRLMSIS
                 }
             }
         }
-        
+
         /// <summary>
         /// Validates that MSIS has been initialized before use.
         /// </summary>
@@ -385,12 +385,12 @@ namespace NRLMSIS
         /// </exception>
         public static void ValidateInitialization()
         {
-            if (!MsisInit.InitFlag)
+            if (!Initialization.InitFlag)
             {
                 throw new InvalidOperationException(
                     "MSIS model has not been initialized. " +
-                    "Call MsisInit.MsisInitialize() before performing calculations. " +
-                    "Example: MsisInit.MsisInitialize(parmPath: \"./\", parmFile: \"msis21.parm\");");
+                    "Call Initialization.Initializationialize() before performing calculations. " +
+                    "Example: Initialization.Initializationialize(parmPath: \"./\", parmFile: \"msis21.parm\");");
             }
         }
     }

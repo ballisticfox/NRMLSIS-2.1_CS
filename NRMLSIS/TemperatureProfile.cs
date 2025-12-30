@@ -13,11 +13,11 @@
 // ===========================================================================
 
 // **************************************************************************************************
-// MSIS_Tfn: Contains vertical temperature profile parameters and subroutines, including 
+// MSIS_Tfn: Contains vertical temperature profile parameters and subroutines, including
 //           temperature integration terms.
 //
 // Key Translation Notes:
-// - TnParm structure contains all temperature profile parameters
+// - TemperatureProfile structure contains all temperature profile parameters
 // - Array indexing: Fortran's Beta[0:maxnbf-1, bl:nl] becomes C# Beta[maxnbf, nl-bl+1]
 // - Fortran array slicing in dot_product calls handled with helper methods
 // - wght parameter in TfnX: Fortran wght(-3:0) maps to C# wght[0:3]
@@ -31,9 +31,9 @@ namespace NRLMSIS
     /// <summary>
     /// Temperature profile parameters structure
     /// </summary>
-    public class TnParm
+    public class TemperatureProfile
     {
-        public double[] Cf { get; set; } = new double[MsisConstants.Nl + 1];      // Spline coefficients [0:nl]
+        public double[] Cf { get; set; } = new double[Constants.Nl + 1];      // Spline coefficients [0:nl]
         public double TZetaF { get; set; }                                          // Tn at zetaF
         public double TZetaA { get; set; }                                          // Tn at zetaA (reference altitude for O1, H1)
         public double DlnTdzA { get; set; }                                         // log-temperature gradient at zetaA (km^-1)
@@ -44,8 +44,8 @@ namespace NRLMSIS
         public double Sigma { get; set; }                                           // Shape factor
         public double SigmaSq { get; set; }                                         // Sigma squared
         public double B { get; set; }                                               // b = 1-tb0/tex
-        public double[] Beta { get; set; } = new double[MsisConstants.Nl + 1];     // 1st integration coefficients on k=5 splines [0:nl]
-        public double[] Gamma { get; set; } = new double[MsisConstants.Nl + 1];    // 2nd integration coefficients on k=6 splines [0:nl]
+        public double[] Beta { get; set; } = new double[Constants.Nl + 1];     // 1st integration coefficients on k=5 splines [0:nl]
+        public double[] Gamma { get; set; } = new double[Constants.Nl + 1];    // 2nd integration coefficients on k=6 splines [0:nl]
         public double CVs { get; set; }                                             // 1st integration constant (spline portion)
         public double CVb { get; set; }                                             // 1st integration constant (Bates portion)
         public double CWs { get; set; }                                             // 2nd integration constant (spline portion)
@@ -69,40 +69,40 @@ namespace NRLMSIS
         /// </summary>
         /// <param name="gf">Array of horizontal and temporal basis function terms [0:maxnbf-1]</param>
         /// <param name="tpro">Output structure containing temperature vertical profile parameters</param>
-        public static void TfnParm(double[] gf, out TnParm tpro)
+        public static void TfnParm(double[] gf, out TemperatureProfile tpro)
         {
-            tpro = new TnParm();
+            tpro = new TemperatureProfile();
 
             // Unconstrained spline coefficients
-            for (int ix = 0; ix <= MsisConstants.ItB0 - 1; ix++)
+            for (int ix = 0; ix <= Constants.ItB0 - 1; ix++)
             {
-                tpro.Cf[ix] = DotProduct(MsisInit.TN.Beta, 0, MsisConstants.Mbf, ix, gf, 0, MsisConstants.Mbf);
+                tpro.Cf[ix] = DotProduct(Initialization.TN.Beta, 0, Constants.Mbf, ix, gf, 0, Constants.Mbf);
             }
 
-            for (int ix = 0; ix <= MsisConstants.ItB0 - 1; ix++)
+            for (int ix = 0; ix <= Constants.ItB0 - 1; ix++)
             {
-                if (MsisInit.Smod[ix])
+                if (Initialization.Smod[ix])
                 {
                     // sfluxmod adds F10.7 modulation of tides
-                    tpro.Cf[ix] = tpro.Cf[ix] + MsisGfn.SFluxMod(ix, gf, MsisInit.TN, 1.0 / MsisInit.TN.Beta[0, ix - MsisInit.TN.Bl]);
+                    tpro.Cf[ix] = tpro.Cf[ix] + BasisFunctions.SFluxMod(ix, gf, Initialization.TN, 1.0 / Initialization.TN.Beta[0, ix - Initialization.TN.Bl]);
                 }
             }
 
             // Exospheric temperature
-            tpro.Tex = DotProduct(MsisInit.TN.Beta, 0, MsisConstants.Mbf, MsisConstants.ItEx, gf, 0, MsisConstants.Mbf);
-            tpro.Tex = tpro.Tex + MsisGfn.SFluxMod(MsisConstants.ItEx, gf, MsisInit.TN, 1.0 / MsisInit.TN.Beta[0, MsisConstants.ItEx - MsisInit.TN.Bl]);
+            tpro.Tex = DotProduct(Initialization.TN.Beta, 0, Constants.Mbf, Constants.ItEx, gf, 0, Constants.Mbf);
+            tpro.Tex = tpro.Tex + BasisFunctions.SFluxMod(Constants.ItEx, gf, Initialization.TN, 1.0 / Initialization.TN.Beta[0, Constants.ItEx - Initialization.TN.Bl]);
 
             // Extract geomag parameters and basis functions
-            double[] geomagParms = new double[MsisConstants.NMag];
-            for (int i = 0; i < MsisConstants.NMag; i++)
+            double[] geomagParms = new double[Constants.NMag];
+            for (int i = 0; i < Constants.NMag; i++)
             {
-                geomagParms[i] = MsisInit.TN.Beta[MsisConstants.CMag + i, MsisConstants.ItEx - MsisInit.TN.Bl];
+                geomagParms[i] = Initialization.TN.Beta[Constants.CMag + i, Constants.ItEx - Initialization.TN.Bl];
             }
             double[] geomagBf1 = new double[13];
-            Array.Copy(gf, MsisConstants.CMag, geomagBf1, 0, 13);
+            Array.Copy(gf, Constants.CMag, geomagBf1, 0, 13);
             // Extract geomag basis functions - need to construct plg array from gf
             double[,] geomagBf2 = new double[7, 2]; // plg(0:6, 0:1)
-            int gfOffset = MsisConstants.CMag + 13;
+            int gfOffset = Constants.CMag + 13;
             for (int n = 0; n <= 6; n++)
             {
                 geomagBf2[n, 0] = gf[gfOffset + n];
@@ -111,45 +111,45 @@ namespace NRLMSIS
             {
                 geomagBf2[n, 1] = gf[gfOffset + 7 + n];
             }
-            tpro.Tex = tpro.Tex + MsisGfn.GeoMag(geomagParms, geomagBf1, geomagBf2);
+            tpro.Tex = tpro.Tex + BasisFunctions.GeoMag(geomagParms, geomagBf1, geomagBf2);
 
             // Extract utdep parameters and basis functions
-            double[] utdepParms = new double[MsisConstants.NUt];
-            for (int i = 0; i < MsisConstants.NUt; i++)
+            double[] utdepParms = new double[Constants.NUt];
+            for (int i = 0; i < Constants.NUt; i++)
             {
-                utdepParms[i] = MsisInit.TN.Beta[MsisConstants.CUt + i, MsisConstants.ItEx - MsisInit.TN.Bl];
+                utdepParms[i] = Initialization.TN.Beta[Constants.CUt + i, Constants.ItEx - Initialization.TN.Bl];
             }
             double[] utdepBf = new double[9];
-            Array.Copy(gf, MsisConstants.CUt, utdepBf, 0, 9);
-            tpro.Tex = tpro.Tex + MsisGfn.UtDep(utdepParms, utdepBf);
+            Array.Copy(gf, Constants.CUt, utdepBf, 0, 9);
+            tpro.Tex = tpro.Tex + BasisFunctions.UtDep(utdepParms, utdepBf);
 
             // Temperature gradient at zetaB (122.5 km)
-            tpro.Tgb0 = DotProduct(MsisInit.TN.Beta, 0, MsisConstants.Mbf, MsisConstants.ItGb0, gf, 0, MsisConstants.Mbf);
-            if (MsisInit.Smod[MsisConstants.ItGb0])
+            tpro.Tgb0 = DotProduct(Initialization.TN.Beta, 0, Constants.Mbf, Constants.ItGb0, gf, 0, Constants.Mbf);
+            if (Initialization.Smod[Constants.ItGb0])
             {
-                tpro.Tgb0 = tpro.Tgb0 + MsisGfn.SFluxMod(MsisConstants.ItGb0, gf, MsisInit.TN, 1.0 / MsisInit.TN.Beta[0, MsisConstants.ItGb0 - MsisInit.TN.Bl]);
+                tpro.Tgb0 = tpro.Tgb0 + BasisFunctions.SFluxMod(Constants.ItGb0, gf, Initialization.TN, 1.0 / Initialization.TN.Beta[0, Constants.ItGb0 - Initialization.TN.Bl]);
             }
 
             // Extract geomag parameters for Tgb0
-            for (int i = 0; i < MsisConstants.NMag; i++)
+            for (int i = 0; i < Constants.NMag; i++)
             {
-                geomagParms[i] = MsisInit.TN.Beta[MsisConstants.CMag + i, MsisConstants.ItGb0 - MsisInit.TN.Bl];
+                geomagParms[i] = Initialization.TN.Beta[Constants.CMag + i, Constants.ItGb0 - Initialization.TN.Bl];
             }
-            tpro.Tgb0 = tpro.Tgb0 + MsisGfn.GeoMag(geomagParms, geomagBf1, geomagBf2);
+            tpro.Tgb0 = tpro.Tgb0 + BasisFunctions.GeoMag(geomagParms, geomagBf1, geomagBf2);
 
             // Temperature at zetaB (122.5 km)
-            tpro.Tb0 = DotProduct(MsisInit.TN.Beta, 0, MsisConstants.Mbf, MsisConstants.ItB0, gf, 0, MsisConstants.Mbf);
-            if (MsisInit.Smod[MsisConstants.ItB0])
+            tpro.Tb0 = DotProduct(Initialization.TN.Beta, 0, Constants.Mbf, Constants.ItB0, gf, 0, Constants.Mbf);
+            if (Initialization.Smod[Constants.ItB0])
             {
-                tpro.Tb0 = tpro.Tb0 + MsisGfn.SFluxMod(MsisConstants.ItB0, gf, MsisInit.TN, 1.0 / MsisInit.TN.Beta[0, MsisConstants.ItB0 - MsisInit.TN.Bl]);
+                tpro.Tb0 = tpro.Tb0 + BasisFunctions.SFluxMod(Constants.ItB0, gf, Initialization.TN, 1.0 / Initialization.TN.Beta[0, Constants.ItB0 - Initialization.TN.Bl]);
             }
 
             // Extract geomag parameters for Tb0
-            for (int i = 0; i < MsisConstants.NMag; i++)
+            for (int i = 0; i < Constants.NMag; i++)
             {
-                geomagParms[i] = MsisInit.TN.Beta[MsisConstants.CMag + i, MsisConstants.ItB0 - MsisInit.TN.Bl];
+                geomagParms[i] = Initialization.TN.Beta[Constants.CMag + i, Constants.ItB0 - Initialization.TN.Bl];
             }
-            tpro.Tb0 = tpro.Tb0 + MsisGfn.GeoMag(geomagParms, geomagBf1, geomagBf2);
+            tpro.Tb0 = tpro.Tb0 + BasisFunctions.GeoMag(geomagParms, geomagBf1, geomagBf2);
 
             // Shape factor
             tpro.Sigma = tpro.Tgb0 / (tpro.Tex - tpro.Tb0);
@@ -161,60 +161,60 @@ namespace NRLMSIS
             bc[2] = -bc[1] * (tpro.Sigma + 2.0 * tpro.Tgb0 / tpro.Tb0);
 
             // Matrix multiplication: bc * c2tn
-            for (int i = MsisConstants.ItB0; i <= MsisConstants.ItEx; i++)
+            for (int i = Constants.ItB0; i <= Constants.ItEx; i++)
             {
-                int col = i - MsisConstants.ItB0;
+                int col = i - Constants.ItB0;
                 tpro.Cf[i] = 0.0;
                 for (int row = 0; row < 3; row++)
                 {
-                    tpro.Cf[i] += bc[row] * MsisConstants.C2Tn[row, col];
+                    tpro.Cf[i] += bc[row] * Constants.C2Tn[row, col];
                 }
             }
 
             // Reference temperature at zetaF (70 km)
-            tpro.TZetaF = 1.0 / DotProduct(tpro.Cf, MsisConstants.IzFx, MsisConstants.IzFx + 2, 
-                                           MsisConstants.S4ZetaF, 0, 2);
+            tpro.TZetaF = 1.0 / DotProduct(tpro.Cf, Constants.IzFx, Constants.IzFx + 2,
+                                           Constants.S4ZetaF, 0, 2);
 
             // Reference temperature and gradient at zetaA (85 km)
-            tpro.TZetaA = 1.0 / DotProduct(tpro.Cf, MsisConstants.IzAx, MsisConstants.IzAx + 2,
-                                           MsisConstants.S4ZetaA, 0, 2);
-            tpro.DlnTdzA = -DotProduct(tpro.Cf, MsisConstants.IzAx, MsisConstants.IzAx + 2,
-                                       MsisConstants.WghtAxdz, 0, 2) * tpro.TZetaA;
+            tpro.TZetaA = 1.0 / DotProduct(tpro.Cf, Constants.IzAx, Constants.IzAx + 2,
+                                           Constants.S4ZetaA, 0, 2);
+            tpro.DlnTdzA = -DotProduct(tpro.Cf, Constants.IzAx, Constants.IzAx + 2,
+                                       Constants.WghtAxdz, 0, 2) * tpro.TZetaA;
 
             // Calculate spline coefficients for first and second 1/T integrals
-            tpro.Beta[0] = tpro.Cf[0] * MsisConstants.WBeta[0];
-            for (int ix = 1; ix <= MsisConstants.Nl; ix++)
+            tpro.Beta[0] = tpro.Cf[0] * Constants.WBeta[0];
+            for (int ix = 1; ix <= Constants.Nl; ix++)
             {
-                tpro.Beta[ix] = tpro.Beta[ix - 1] + tpro.Cf[ix] * MsisConstants.WBeta[ix];
+                tpro.Beta[ix] = tpro.Beta[ix - 1] + tpro.Cf[ix] * Constants.WBeta[ix];
             }
 
-            tpro.Gamma[0] = tpro.Beta[0] * MsisConstants.WGamma[0];
-            for (int ix = 1; ix <= MsisConstants.Nl; ix++)
+            tpro.Gamma[0] = tpro.Beta[0] * Constants.WGamma[0];
+            for (int ix = 1; ix <= Constants.Nl; ix++)
             {
-                tpro.Gamma[ix] = tpro.Gamma[ix - 1] + tpro.Beta[ix] * MsisConstants.WGamma[ix];
+                tpro.Gamma[ix] = tpro.Gamma[ix - 1] + tpro.Beta[ix] * Constants.WGamma[ix];
             }
 
             // Integration terms and constants
             tpro.B = 1 - tpro.Tb0 / tpro.Tex;
             tpro.SigmaSq = tpro.Sigma * tpro.Sigma;
-            tpro.CVs = -DotProduct(tpro.Beta, MsisConstants.ItB0 - 1, MsisConstants.ItB0 + 2,
-                                   MsisConstants.S5ZetaB, 0, 3);
-            tpro.CWs = -DotProduct(tpro.Gamma, MsisConstants.ItB0 - 2, MsisConstants.ItB0 + 2,
-                                   MsisConstants.S6ZetaB, 0, 4);
+            tpro.CVs = -DotProduct(tpro.Beta, Constants.ItB0 - 1, Constants.ItB0 + 2,
+                                   Constants.S5ZetaB, 0, 3);
+            tpro.CWs = -DotProduct(tpro.Gamma, Constants.ItB0 - 2, Constants.ItB0 + 2,
+                                   Constants.S6ZetaB, 0, 4);
             tpro.CVb = -Math.Log(1 - tpro.B) / (tpro.Sigma * tpro.Tex);
-            tpro.CWb = -MsisUtils.Dilog(tpro.B) / (tpro.SigmaSq * tpro.Tex);
-            tpro.VZetaF = DotProduct(tpro.Beta, MsisConstants.IzFx - 1, MsisConstants.IzFx + 2,
-                                     MsisConstants.S5ZetaF, 0, 3) + tpro.CVs;
-            tpro.VZetaA = DotProduct(tpro.Beta, MsisConstants.IzAx - 1, MsisConstants.IzAx + 2,
-                                     MsisConstants.S5ZetaA, 0, 3) + tpro.CVs;
-            tpro.WZetaA = DotProduct(tpro.Gamma, MsisConstants.IzAx - 2, MsisConstants.IzAx + 2,
-                                     MsisConstants.S6ZetaA, 0, 4) + tpro.CVs * (MsisConstants.ZetaA - MsisConstants.ZetaB) + tpro.CWs;
+            tpro.CWb = -Utilities.Dilog(tpro.B) / (tpro.SigmaSq * tpro.Tex);
+            tpro.VZetaF = DotProduct(tpro.Beta, Constants.IzFx - 1, Constants.IzFx + 2,
+                                     Constants.S5ZetaF, 0, 3) + tpro.CVs;
+            tpro.VZetaA = DotProduct(tpro.Beta, Constants.IzAx - 1, Constants.IzAx + 2,
+                                     Constants.S5ZetaA, 0, 3) + tpro.CVs;
+            tpro.WZetaA = DotProduct(tpro.Gamma, Constants.IzAx - 2, Constants.IzAx + 2,
+                                     Constants.S6ZetaA, 0, 4) + tpro.CVs * (Constants.ZetaA - Constants.ZetaB) + tpro.CWs;
             tpro.VZeta0 = DotProduct(tpro.Beta, 0, 2,
-                                     MsisConstants.S5Zeta0, 0, 2) + tpro.CVs;
+                                     Constants.S5Zeta0, 0, 2) + tpro.CVs;
 
             // Compute total number density at zetaF
-            tpro.LnDTotF = MsisConstants.LnP0 - MsisConstants.MbarG0DivKB * (tpro.VZetaF - tpro.VZeta0) 
-                         - Math.Log(MsisConstants.KB * tpro.TZetaF);
+            tpro.LnDTotF = Constants.LnP0 - Constants.MbarG0DivKB * (tpro.VZetaF - tpro.VZeta0)
+                         - Math.Log(Constants.KB * tpro.TZetaF);
         }
 
         // ==================================================================================================
@@ -228,16 +228,16 @@ namespace NRLMSIS
         /// <param name="wght">Bspline weights - array[4] representing Fortran wght(-3:0)</param>
         /// <param name="tpro">Structure containing temperature vertical profile parameters</param>
         /// <returns>Temperature at height z</returns>
-        public static double TfnX(double z, int iz, double[] wght, TnParm tpro)
+        public static double TfnX(double z, int iz, double[] wght, TemperatureProfile tpro)
         {
             double tfnx;
 
-            if (z < MsisConstants.ZetaB)
+            if (z < Constants.ZetaB)
             {
                 // Spline region
                 int i = Math.Max(iz - 3, 0);
                 int jStart;
-                
+
                 if (iz < 3)
                 {
                     jStart = -iz;
@@ -263,21 +263,21 @@ namespace NRLMSIS
             else
             {
                 // Bates profile region
-                tfnx = tpro.Tex - (tpro.Tex - tpro.Tb0) * Math.Exp(-tpro.Sigma * (z - MsisConstants.ZetaB));
+                tfnx = tpro.Tex - (tpro.Tex - tpro.Tb0) * Math.Exp(-tpro.Sigma * (z - Constants.ZetaB));
             }
 
             return tfnx;
         }
 
         // Helper method for dot product between subset Beta array and gf array
-        private static double DotProduct(double[,] beta, int betaRowStart, int betaRowEnd, int betaCol, 
+        private static double DotProduct(double[,] beta, int betaRowStart, int betaRowEnd, int betaCol,
                                         double[] gf, int gfStart, int gfEnd)
         {
             double sum = 0.0;
             int gfIdx = gfStart;
             for (int i = betaRowStart; i <= betaRowEnd; i++)
             {
-                sum += beta[i, betaCol - MsisInit.TN.Bl] * gf[gfIdx];
+                sum += beta[i, betaCol - Initialization.TN.Bl] * gf[gfIdx];
                 gfIdx++;
             }
             return sum;
