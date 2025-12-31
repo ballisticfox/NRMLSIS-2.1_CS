@@ -23,20 +23,29 @@ using NRLMSIS.Infrastructure;
 namespace NRLMSIS.Calculators
 {
     /// <summary>
-    /// Global basis functions for NRLMSIS 2.1
+    /// Global basis functions for NRLMSIS 2.1.
+    /// Computes horizontal and time-dependent basis functions using:
+    /// - Associated Legendre polynomials for latitude dependence
+    /// - Fourier harmonics for temporal and longitudinal variations
+    /// - Solar flux modulation terms
+    /// - Geomagnetic activity effects
     /// </summary>
     public static class BasisFunctions
     {
-        // Module-level variables for caching
-        private static double[,] plg = new double[Constants.MaxN + 1, Constants.MaxN + 1]; // [0:maxn, 0:maxn]
-        private static double[] cdoy = new double[2]; // [0:1] for indices 1-2 in Fortran
-        private static double[] sdoy = new double[2]; // [0:1] for indices 1-2 in Fortran
-        private static double[] clst = new double[3]; // [0:2] for indices 1-3 in Fortran
-        private static double[] slst = new double[3]; // [0:2] for indices 1-3 in Fortran
-        private static double[] clon = new double[2]; // [0:1] for indices 1-2 in Fortran
-        private static double[] slon = new double[2]; // [0:1] for indices 1-2 in Fortran
-        private static double sfluxAvgRef = 150.0; // Reference F10.7 value (=150 in NRLMSISE-00)
-        private static double sfluxAvgQuadCutoff = 150.0; // Cutoff F10.7 for truncated quadratic F10.7a function
+        // Module-level cache for computed values
+        private static double[,] plg = new double[Constants.MaxN + 1, Constants.MaxN + 1]; // Associated Legendre polynomials
+        private static double[] cdoy = new double[2]; // Cosine of day-of-year harmonics [annual, semiannual]
+        private static double[] sdoy = new double[2]; // Sine of day-of-year harmonics [annual, semiannual]
+        private static double[] clst = new double[3]; // Cosine of local solar time harmonics [diurnal, semidiurnal, terdiurnal]
+        private static double[] slst = new double[3]; // Sine of local solar time harmonics [diurnal, semidiurnal, terdiurnal]
+        private static double[] clon = new double[2]; // Cosine of longitude harmonics [wave-1, wave-2]
+        private static double[] slon = new double[2]; // Sine of longitude harmonics [wave-1, wave-2]
+
+        // Reference values for solar flux
+        private static double sfluxAvgRef = 150.0; // Reference F10.7 value (NRLMSISE-00 standard)
+        private static double sfluxAvgQuadCutoff = 150.0; // Cutoff for truncated quadratic F10.7a function
+
+        // Cache validation - tracks last computed values
         private static double lastLat = -999.9;
         private static double lastDoy = -999.9;
         private static double lastLst = -999.9;
@@ -47,14 +56,15 @@ namespace NRLMSIS.Calculators
         //        (Same purpose as NRLMSISE-00 "GLOBE7" subroutine)
         // ==================================================================================================
         /// <summary>
-        /// Calculate horizontal and time-dependent basis functions
+        /// Calculate horizontal and time-dependent basis functions.
+        /// Computes all spatial and temporal variations used in the MSIS model.
         /// </summary>
-        /// <param name="doy">Day of year</param>
-        /// <param name="utsec">Universal time in seconds</param>
-        /// <param name="lat">Latitude (degrees)</param>
-        /// <param name="lon">Longitude (degrees)</param>
-        /// <param name="sfluxavg">81-day average F10.7</param>
-        /// <param name="sflux">Daily F10.7</param>
+        /// <param name="doy">Day of year (1-366)</param>
+        /// <param name="utsec">Universal time in seconds (0-86400)</param>
+        /// <param name="lat">Geodetic latitude in degrees (-90 to 90)</param>
+        /// <param name="lon">Geodetic longitude in degrees (-180 to 360)</param>
+        /// <param name="sfluxavg">81-day average F10.7 solar flux</param>
+        /// <param name="sflux">Daily F10.7 solar flux</param>
         /// <param name="ap">Ap geomagnetic activity index history array [0:6] (7 elements)</param>
         /// <param name="bf">Output: basis function terms [0:maxnbf-1]</param>
         public static void Globe(double doy, double utsec, double lat, double lon,
@@ -62,283 +72,491 @@ namespace NRLMSIS.Calculators
         {
             bf = new double[Constants.MaxNbf];
 
-            double lst;
-            double slat, clat, clat2, clat4, slat2;
-            double cosdoy, sindoy;
-            double coslon, sinlon;
-            double pl;
-            double coslst, sinlst;
-            double dfa, df;
-            double sza;
-            int c;
-
-            // Associated Legendre polynomials
-            if (lat != lastLat)
-            {
-                clat = Math.Sin(lat * Constants.Deg2Rad);  // clat <=> sin, Legendre polynomial defined in colat
-                slat = Math.Cos(lat * Constants.Deg2Rad);  // slat <=> cos, Legendre polynomial defined in colat
-                clat2 = clat * clat;
-                clat4 = clat2 * clat2;
-                slat2 = slat * slat;
-
-                plg[0, 0] = 1.0;
-                plg[1, 0] = clat;
-                plg[2, 0] = 0.5 * (3.0 * clat2 - 1.0);
-                plg[3, 0] = 0.5 * (5.0 * clat * clat2 - 3.0 * clat);
-                plg[4, 0] = (35.0 * clat4 - 30.0 * clat2 + 3.0) / 8.0;
-                plg[5, 0] = (63.0 * clat2 * clat2 * clat - 70.0 * clat2 * clat + 15.0 * clat) / 8.0;
-                plg[6, 0] = (11.0 * clat * plg[5, 0] - 5.0 * plg[4, 0]) / 6.0;
-
-                plg[1, 1] = slat;
-                plg[2, 1] = 3.0 * clat * slat;
-                plg[3, 1] = 1.5 * (5.0 * clat2 - 1.0) * slat;
-                plg[4, 1] = 2.5 * (7.0 * clat2 * clat - 3.0 * clat) * slat;
-                plg[5, 1] = 1.875 * (21.0 * clat4 - 14.0 * clat2 + 1.0) * slat;
-                plg[6, 1] = (11.0 * clat * plg[5, 1] - 6.0 * plg[4, 1]) / 5.0;
-
-                plg[2, 2] = 3.0 * slat2;
-                plg[3, 2] = 15.0 * slat2 * clat;
-                plg[4, 2] = 7.5 * (7.0 * clat2 - 1.0) * slat2;
-                plg[5, 2] = 3.0 * clat * plg[4, 2] - 2.0 * plg[3, 2];
-                plg[6, 2] = (11.0 * clat * plg[5, 2] - 7.0 * plg[4, 2]) / 4.0;
-
-                plg[3, 3] = 15.0 * slat2 * slat;
-                plg[4, 3] = 105.0 * slat2 * slat * clat;
-                plg[5, 3] = (9.0 * clat * plg[4, 3] - 7.0 * plg[3, 3]) / 2.0;
-                plg[6, 3] = (11.0 * clat * plg[5, 3] - 8.0 * plg[4, 3]) / 3.0;
-
-                lastLat = lat;
-            }
-
-            // Fourier harmonics of day of year
-            if (doy != lastDoy)
-            {
-                cdoy[0] = Math.Cos(Constants.Doy2Rad * doy);
-                sdoy[0] = Math.Sin(Constants.Doy2Rad * doy);
-                cdoy[1] = Math.Cos(Constants.Doy2Rad * doy * 2.0);
-                sdoy[1] = Math.Sin(Constants.Doy2Rad * doy * 2.0);
-                lastDoy = doy;
-            }
-
-            // Fourier harmonics of local time
-            lst = (utsec / 3600.0 + lon / 15.0) % 24.0;
+            // Calculate local solar time
+            double lst = (utsec / 3600.0 + lon / 15.0) % 24.0;
             if (lst < 0) lst += 24.0;
-            if (lst != lastLst)
-            {
-                clst[0] = Math.Cos(Constants.Lst2Rad * lst);
-                slst[0] = Math.Sin(Constants.Lst2Rad * lst);
-                clst[1] = Math.Cos(Constants.Lst2Rad * lst * 2.0);
-                slst[1] = Math.Sin(Constants.Lst2Rad * lst * 2.0);
-                clst[2] = Math.Cos(Constants.Lst2Rad * lst * 3.0);
-                slst[2] = Math.Sin(Constants.Lst2Rad * lst * 3.0);
-                lastLst = lst;
-            }
 
-            // Fourier harmonics of longitude
-            if (lon != lastLon)
-            {
-                clon[0] = Math.Cos(Constants.Deg2Rad * lon);
-                slon[0] = Math.Sin(Constants.Deg2Rad * lon);
-                clon[1] = Math.Cos(Constants.Deg2Rad * lon * 2.0);
-                slon[1] = Math.Sin(Constants.Deg2Rad * lon * 2.0);
-                lastLon = lon;
-            }
+            // Update cached trigonometric values (only if inputs changed)
+            UpdateLegendrePolynomials(lat);
+            UpdateDayOfYearHarmonics(doy);
+            UpdateLocalTimeHarmonics(lst);
+            UpdateLongitudeHarmonics(lon);
 
             //---------------------------------------------
-            // Coupled Linear Terms
+            // LINEAR TERMS
             //---------------------------------------------
+            int basisIndex = 0;
 
-            // Reset basis functions
-            Array.Clear(bf, 0, bf.Length);
-
-            // Time-independent (pure latitude dependence)
-            c = Constants.CTimeInd;
-            for (int n = 0; n <= Constants.AMaxN; n++)
-            {
-                bf[c] = plg[n, 0];
-                c++;
-            }
-
-            // Intra-annual (annual and semiannual)
-            if (c != Constants.CIntAnn) throw new InvalidOperationException("Problem with basis definitions");
-            for (int s = 1; s <= Constants.AMaxS; s++)
-            {
-                cosdoy = cdoy[s - 1];
-                sindoy = sdoy[s - 1];
-                for (int n = 0; n <= Constants.AMaxN; n++)
-                {
-                    pl = plg[n, 0];
-                    bf[c] = pl * cosdoy;
-                    bf[c + 1] = pl * sindoy;
-                    c += 2;
-                }
-            }
-
-            // Migrating Tides (local time dependence)
-            if (c != Constants.CTide) throw new InvalidOperationException("Problem with basis definitions");
-            for (int l = 1; l <= Constants.TMaxL; l++)
-            {
-                coslst = clst[l - 1];
-                sinlst = slst[l - 1];
-                for (int n = l; n <= Constants.TMaxN; n++)
-                {
-                    pl = plg[n, l];
-                    bf[c] = pl * coslst;
-                    bf[c + 1] = pl * sinlst;
-                    c += 2;
-                }
-                // Intra-annual modulation of tides
-                for (int s = 1; s <= Constants.TMaxS; s++)
-                {
-                    cosdoy = cdoy[s - 1];
-                    sindoy = sdoy[s - 1];
-                    for (int n = l; n <= Constants.TMaxN; n++)
-                    {
-                        pl = plg[n, l];
-                        bf[c] = pl * coslst * cosdoy;
-                        bf[c + 1] = pl * sinlst * cosdoy;
-                        bf[c + 2] = pl * coslst * sindoy;
-                        bf[c + 3] = pl * sinlst * sindoy;
-                        c += 4;
-                    }
-                }
-            }
-
-            // Stationary Planetary Waves (longitude dependence)
-            if (c != Constants.CSpw) throw new InvalidOperationException("Problem with basis definitions");
-            for (int m = 1; m <= Constants.PMaxM; m++)
-            {
-                coslon = clon[m - 1];
-                sinlon = slon[m - 1];
-                for (int n = m; n <= Constants.PMaxN; n++)
-                {
-                    pl = plg[n, m];
-                    bf[c] = pl * coslon;
-                    bf[c + 1] = pl * sinlon;
-                    c += 2;
-                }
-                // Intra-annual modulation of SPWs
-                for (int s = 1; s <= Constants.PMaxS; s++)
-                {
-                    cosdoy = cdoy[s - 1];
-                    sindoy = sdoy[s - 1];
-                    for (int n = m; n <= Constants.PMaxN; n++)
-                    {
-                        pl = plg[n, m];
-                        bf[c] = pl * coslon * cosdoy;
-                        bf[c + 1] = pl * sinlon * cosdoy;
-                        bf[c + 2] = pl * coslon * sindoy;
-                        bf[c + 3] = pl * sinlon * sindoy;
-                        c += 4;
-                    }
-                }
-            }
-
-            // Linear solar flux terms
-            if (c != Constants.CSfx) throw new InvalidOperationException("Problem with basis definitions");
-            dfa = sfluxavg - sfluxAvgRef;
-            df = sflux - sfluxavg;
-            bf[c] = dfa;
-            bf[c + 1] = dfa * dfa;
-            bf[c + 2] = df;
-            bf[c + 3] = df * df;
-            bf[c + 4] = df * dfa;
-            c += Constants.NSfx;
-
-            // Additional linear terms
-            if (c != Constants.CExtra) throw new InvalidOperationException("Problem with basis definitions");
-            sza = SolZen(doy, lst, lat, lon);
-            bf[c] = -0.5 * Math.Tanh((sza - 98.0) / 6.0);      // Solar zenith angle logistic function for O, H
-            bf[c + 1] = -0.5 * Math.Tanh((sza - 101.5) / 20.0); // Solar zenith angle logistic function for NO
-            bf[c + 2] = dfa * bf[c];                            // Solar flux modulation of logistic sza term
-            bf[c + 3] = dfa * bf[c + 1];                        // Solar flux modulation of logistic sza term
-            bf[c + 4] = dfa * plg[2, 0];                        // Solar flux modulation of P(2,0) term
-            bf[c + 5] = dfa * plg[4, 0];                        // Solar flux modulation of P(4,0) term
-            bf[c + 6] = dfa * plg[0, 0] * cdoy[0];              // Solar flux modulation of global AO
-            bf[c + 7] = dfa * plg[0, 0] * sdoy[0];              // Solar flux modulation of global AO
-            bf[c + 8] = dfa * plg[0, 0] * cdoy[1];              // Solar flux modulation of global SAO
-            bf[c + 9] = dfa * plg[0, 0] * sdoy[1];              // Solar flux modulation of global SAO
-
-            if (sfluxavg <= sfluxAvgQuadCutoff)
-            {
-                bf[c + 10] = dfa * dfa;
-            }
-            else
-            {
-                bf[c + 10] = (sfluxAvgQuadCutoff - sfluxAvgRef) * (2.0 * dfa - (sfluxAvgQuadCutoff - sfluxAvgRef));
-            }
-            bf[c + 11] = bf[c + 10] * plg[2, 0];                // P(2,0) modulation of truncated quadratic F10.7a term
-            bf[c + 12] = bf[c + 10] * plg[4, 0];                // P(4,0) modulation of truncated quadratic F10.7a term
-            bf[c + 13] = df * plg[2, 0];                        // P(2,0) modulation of df
-            bf[c + 14] = df * plg[4, 0];                        // P(4,0) modulation of df
+            basisIndex = BuildTimeIndependentTerms(bf, basisIndex);
+            basisIndex = BuildIntraAnnualTerms(bf, basisIndex);
+            basisIndex = BuildMigratingTideTerms(bf, basisIndex);
+            basisIndex = BuildStationaryPlanetaryWaveTerms(bf, basisIndex);
+            basisIndex = BuildSolarFluxTerms(bf, basisIndex, sfluxavg, sflux);
+            basisIndex = BuildExtraLinearTerms(bf, basisIndex, sfluxavg, sflux, doy, lst, lat, lon);
 
             //---------------------------------------------
-            // Nonlinear Terms
+            // NONLINEAR TERMS
             //---------------------------------------------
+            basisIndex = Constants.CNonLin;
 
-            c = Constants.CNonLin;
-
-            // Solar flux modulation terms
-            if (c != Constants.CSfxMod) throw new InvalidOperationException("Problem with basis definitions");
-            bf[c] = dfa;
-            bf[c + 1] = dfa * dfa;
-            bf[c + 2] = df;
-            bf[c + 3] = df * df;
-            bf[c + 4] = df * dfa;
-            c += Constants.NSfxMod;
-
-            // Terms needed for legacy geomagnetic activity dependence
-            if (c != Constants.CMag) throw new InvalidOperationException("Problem with basis set");
-            for (int i = 0; i < 7; i++)
-            {
-                bf[c + i] = ap[i] - 4.0; // ap array is 1-based in Fortran, 0-based here
-            }
-            bf[c + 8] = Constants.Doy2Rad * doy;
-            bf[c + 9] = Constants.Lst2Rad * lst;
-            bf[c + 10] = Constants.Deg2Rad * lon;
-            bf[c + 11] = Constants.Lst2Rad * utsec / 3600.0;
-            bf[c + 12] = Math.Abs(lat);
-            c += 13;
-            for (int m = 0; m <= 1; m++)
-            {
-                for (int n = 0; n <= Constants.AMaxN; n++)
-                {
-                    bf[c] = plg[n, m];
-                    c++;
-                }
-            }
-
-            // Terms needed for legacy UT dependence
-            c = Constants.CUt;
-            bf[c] = Constants.Lst2Rad * utsec / 3600.0;
-            bf[c + 1] = Constants.Doy2Rad * doy;
-            bf[c + 2] = dfa;
-            bf[c + 3] = Constants.Deg2Rad * lon;
-            bf[c + 4] = plg[1, 0];
-            bf[c + 5] = plg[3, 0];
-            bf[c + 6] = plg[5, 0];
-            bf[c + 7] = plg[3, 2];
-            bf[c + 8] = plg[5, 2];
+            basisIndex = BuildSolarFluxModulationTerms(bf, basisIndex, sfluxavg, sflux);
+            basisIndex = BuildGeomagneticTerms(bf, basisIndex, ap, doy, lst, lat, lon, utsec);
+            BuildUniversalTimeTerms(bf, Constants.CUt, utsec, doy, sfluxavg, lon);
 
             //---------------------------------------------
             // Apply Switches
             //---------------------------------------------
+            ApplySwitches(bf);
+        }
+
+        // ==================================================================================================
+        // CACHED VALUE UPDATES - Only recompute when inputs change
+        // ==================================================================================================
+
+        /// <summary>
+        /// Updates Associated Legendre polynomials if latitude has changed.
+        /// Computes P_n^m(cos(colatitude)) for spherical harmonic expansions.
+        /// </summary>
+        private static void UpdateLegendrePolynomials(double lat)
+        {
+            if (lat == lastLat)
+                return;
+
+            // Note: Legendre polynomials defined in colatitude, so sin(lat) = cos(colat)
+            double cosColatitude = Math.Sin(lat * Constants.Deg2Rad);  // clat in original
+            double sinColatitude = Math.Cos(lat * Constants.Deg2Rad);  // slat in original
+            double cosColat2 = cosColatitude * cosColatitude;
+            double cosColat4 = cosColat2 * cosColat2;
+            double sinColat2 = sinColatitude * sinColatitude;
+
+            // P_n^0 - Zonal harmonics (m=0)
+            plg[0, 0] = 1.0;
+            plg[1, 0] = cosColatitude;
+            plg[2, 0] = 0.5 * (3.0 * cosColat2 - 1.0);
+            plg[3, 0] = 0.5 * (5.0 * cosColatitude * cosColat2 - 3.0 * cosColatitude);
+            plg[4, 0] = (35.0 * cosColat4 - 30.0 * cosColat2 + 3.0) / 8.0;
+            plg[5, 0] = (63.0 * cosColat2 * cosColat2 * cosColatitude - 70.0 * cosColat2 * cosColatitude + 15.0 * cosColatitude) / 8.0;
+            plg[6, 0] = (11.0 * cosColatitude * plg[5, 0] - 5.0 * plg[4, 0]) / 6.0;
+
+            // P_n^1 - Sectoral harmonics (m=1)
+            plg[1, 1] = sinColatitude;
+            plg[2, 1] = 3.0 * cosColatitude * sinColatitude;
+            plg[3, 1] = 1.5 * (5.0 * cosColat2 - 1.0) * sinColatitude;
+            plg[4, 1] = 2.5 * (7.0 * cosColat2 * cosColatitude - 3.0 * cosColatitude) * sinColatitude;
+            plg[5, 1] = 1.875 * (21.0 * cosColat4 - 14.0 * cosColat2 + 1.0) * sinColatitude;
+            plg[6, 1] = (11.0 * cosColatitude * plg[5, 1] - 6.0 * plg[4, 1]) / 5.0;
+
+            // P_n^2 - Tesseral harmonics (m=2)
+            plg[2, 2] = 3.0 * sinColat2;
+            plg[3, 2] = 15.0 * sinColat2 * cosColatitude;
+            plg[4, 2] = 7.5 * (7.0 * cosColat2 - 1.0) * sinColat2;
+            plg[5, 2] = 3.0 * cosColatitude * plg[4, 2] - 2.0 * plg[3, 2];
+            plg[6, 2] = (11.0 * cosColatitude * plg[5, 2] - 7.0 * plg[4, 2]) / 4.0;
+
+            // P_n^3 - Higher order tesseral harmonics (m=3)
+            plg[3, 3] = 15.0 * sinColat2 * sinColatitude;
+            plg[4, 3] = 105.0 * sinColat2 * sinColatitude * cosColatitude;
+            plg[5, 3] = (9.0 * cosColatitude * plg[4, 3] - 7.0 * plg[3, 3]) / 2.0;
+            plg[6, 3] = (11.0 * cosColatitude * plg[5, 3] - 8.0 * plg[4, 3]) / 3.0;
+
+            lastLat = lat;
+        }
+
+        /// <summary>
+        /// Updates day-of-year Fourier harmonics if day has changed.
+        /// Computes annual and semiannual variations.
+        /// </summary>
+        private static void UpdateDayOfYearHarmonics(double doy)
+        {
+            if (doy == lastDoy)
+                return;
+
+            cdoy[0] = Math.Cos(Constants.Doy2Rad * doy);        // Annual (365.25 day period)
+            sdoy[0] = Math.Sin(Constants.Doy2Rad * doy);
+            cdoy[1] = Math.Cos(Constants.Doy2Rad * doy * 2.0);  // Semiannual (182.625 day period)
+            sdoy[1] = Math.Sin(Constants.Doy2Rad * doy * 2.0);
+
+            lastDoy = doy;
+        }
+
+        /// <summary>
+        /// Updates local solar time Fourier harmonics if LST has changed.
+        /// Computes diurnal, semidiurnal, and terdiurnal variations.
+        /// </summary>
+        private static void UpdateLocalTimeHarmonics(double lst)
+        {
+            if (lst == lastLst)
+                return;
+
+            clst[0] = Math.Cos(Constants.Lst2Rad * lst);        // Diurnal (24 hour period)
+            slst[0] = Math.Sin(Constants.Lst2Rad * lst);
+            clst[1] = Math.Cos(Constants.Lst2Rad * lst * 2.0);  // Semidiurnal (12 hour period)
+            slst[1] = Math.Sin(Constants.Lst2Rad * lst * 2.0);
+            clst[2] = Math.Cos(Constants.Lst2Rad * lst * 3.0);  // Terdiurnal (8 hour period)
+            slst[2] = Math.Sin(Constants.Lst2Rad * lst * 3.0);
+
+            lastLst = lst;
+        }
+
+        /// <summary>
+        /// Updates longitude Fourier harmonics if longitude has changed.
+        /// Computes wave-1 and wave-2 planetary wave patterns.
+        /// </summary>
+        private static void UpdateLongitudeHarmonics(double lon)
+        {
+            if (lon == lastLon)
+                return;
+
+            clon[0] = Math.Cos(Constants.Deg2Rad * lon);        // Wave-1 (360° wavelength)
+            slon[0] = Math.Sin(Constants.Deg2Rad * lon);
+            clon[1] = Math.Cos(Constants.Deg2Rad * lon * 2.0);  // Wave-2 (180° wavelength)
+            slon[1] = Math.Sin(Constants.Deg2Rad * lon * 2.0);
+
+            lastLon = lon;
+        }
+
+        // ==================================================================================================
+        // BASIS FUNCTION BUILDERS - LINEAR TERMS
+        // ==================================================================================================
+
+        /// <summary>
+        /// Builds time-independent terms (pure latitude dependence).
+        /// Uses zonal Legendre polynomials P_n^0.
+        /// </summary>
+        private static int BuildTimeIndependentTerms(double[] bf, int startIndex)
+        {
+            int basisIndex = startIndex;
+
+            if (basisIndex != Constants.CTimeInd)
+                throw new InvalidOperationException("Time-independent terms index mismatch");
+
+            for (int latitudeDegree = 0; latitudeDegree <= Constants.AMaxN; latitudeDegree++)
+            {
+                bf[basisIndex] = plg[latitudeDegree, 0];
+                basisIndex++;
+            }
+
+            return basisIndex;
+        }
+
+        /// <summary>
+        /// Builds intra-annual terms (seasonal variations).
+        /// Combines zonal Legendre polynomials with annual/semiannual harmonics.
+        /// </summary>
+        private static int BuildIntraAnnualTerms(double[] bf, int startIndex)
+        {
+            int basisIndex = startIndex;
+
+            if (basisIndex != Constants.CIntAnn)
+                throw new InvalidOperationException("Intra-annual terms index mismatch");
+
+            for (int seasonalHarmonic = 1; seasonalHarmonic <= Constants.AMaxS; seasonalHarmonic++)
+            {
+                double cosDayOfYear = cdoy[seasonalHarmonic - 1];
+                double sinDayOfYear = sdoy[seasonalHarmonic - 1];
+
+                for (int latitudeDegree = 0; latitudeDegree <= Constants.AMaxN; latitudeDegree++)
+                {
+                    double legendrePolynomial = plg[latitudeDegree, 0];
+                    bf[basisIndex] = legendrePolynomial * cosDayOfYear;
+                    bf[basisIndex + 1] = legendrePolynomial * sinDayOfYear;
+                    basisIndex += 2;
+                }
+            }
+
+            return basisIndex;
+        }
+
+        /// <summary>
+        /// Builds migrating tide terms (local time dependence).
+        /// Includes tides and their seasonal modulation.
+        /// </summary>
+        private static int BuildMigratingTideTerms(double[] bf, int startIndex)
+        {
+            int basisIndex = startIndex;
+
+            if (basisIndex != Constants.CTide)
+                throw new InvalidOperationException("Migrating tide terms index mismatch");
+
+            for (int localTimeHarmonic = 1; localTimeHarmonic <= Constants.TMaxL; localTimeHarmonic++)
+            {
+                double cosLocalSolarTime = clst[localTimeHarmonic - 1];
+                double sinLocalSolarTime = slst[localTimeHarmonic - 1];
+
+                // Base tidal components
+                for (int latitudeDegree = localTimeHarmonic; latitudeDegree <= Constants.TMaxN; latitudeDegree++)
+                {
+                    double legendrePolynomial = plg[latitudeDegree, localTimeHarmonic];
+                    bf[basisIndex] = legendrePolynomial * cosLocalSolarTime;
+                    bf[basisIndex + 1] = legendrePolynomial * sinLocalSolarTime;
+                    basisIndex += 2;
+                }
+
+                // Seasonal modulation of tides
+                for (int seasonalHarmonic = 1; seasonalHarmonic <= Constants.TMaxS; seasonalHarmonic++)
+                {
+                    double cosDayOfYear = cdoy[seasonalHarmonic - 1];
+                    double sinDayOfYear = sdoy[seasonalHarmonic - 1];
+
+                    for (int latitudeDegree = localTimeHarmonic; latitudeDegree <= Constants.TMaxN; latitudeDegree++)
+                    {
+                        double legendrePolynomial = plg[latitudeDegree, localTimeHarmonic];
+                        bf[basisIndex] = legendrePolynomial * cosLocalSolarTime * cosDayOfYear;
+                        bf[basisIndex + 1] = legendrePolynomial * sinLocalSolarTime * cosDayOfYear;
+                        bf[basisIndex + 2] = legendrePolynomial * cosLocalSolarTime * sinDayOfYear;
+                        bf[basisIndex + 3] = legendrePolynomial * sinLocalSolarTime * sinDayOfYear;
+                        basisIndex += 4;
+                    }
+                }
+            }
+
+            return basisIndex;
+        }
+
+        /// <summary>
+        /// Builds stationary planetary wave terms (longitude dependence).
+        /// Includes waves and their seasonal modulation.
+        /// </summary>
+        private static int BuildStationaryPlanetaryWaveTerms(double[] bf, int startIndex)
+        {
+            int basisIndex = startIndex;
+
+            if (basisIndex != Constants.CSpw)
+                throw new InvalidOperationException("Stationary planetary wave terms index mismatch");
+
+            for (int longitudeWaveNumber = 1; longitudeWaveNumber <= Constants.PMaxM; longitudeWaveNumber++)
+            {
+                double cosLongitude = clon[longitudeWaveNumber - 1];
+                double sinLongitude = slon[longitudeWaveNumber - 1];
+
+                // Base planetary wave components
+                for (int latitudeDegree = longitudeWaveNumber; latitudeDegree <= Constants.PMaxN; latitudeDegree++)
+                {
+                    double legendrePolynomial = plg[latitudeDegree, longitudeWaveNumber];
+                    bf[basisIndex] = legendrePolynomial * cosLongitude;
+                    bf[basisIndex + 1] = legendrePolynomial * sinLongitude;
+                    basisIndex += 2;
+                }
+
+                // Seasonal modulation of planetary waves
+                for (int seasonalHarmonic = 1; seasonalHarmonic <= Constants.PMaxS; seasonalHarmonic++)
+                {
+                    double cosDayOfYear = cdoy[seasonalHarmonic - 1];
+                    double sinDayOfYear = sdoy[seasonalHarmonic - 1];
+
+                    for (int latitudeDegree = longitudeWaveNumber; latitudeDegree <= Constants.PMaxN; latitudeDegree++)
+                    {
+                        double legendrePolynomial = plg[latitudeDegree, longitudeWaveNumber];
+                        bf[basisIndex] = legendrePolynomial * cosLongitude * cosDayOfYear;
+                        bf[basisIndex + 1] = legendrePolynomial * sinLongitude * cosDayOfYear;
+                        bf[basisIndex + 2] = legendrePolynomial * cosLongitude * sinDayOfYear;
+                        bf[basisIndex + 3] = legendrePolynomial * sinLongitude * sinDayOfYear;
+                        basisIndex += 4;
+                    }
+                }
+            }
+
+            return basisIndex;
+        }
+
+        /// <summary>
+        /// Builds solar flux modulation terms.
+        /// Linear and quadratic dependence on F10.7 variations.
+        /// </summary>
+        private static int BuildSolarFluxTerms(double[] bf, int startIndex, double sfluxavg, double sflux)
+        {
+            int basisIndex = startIndex;
+
+            if (basisIndex != Constants.CSfx)
+                throw new InvalidOperationException("Solar flux terms index mismatch");
+
+            double avgFluxDeviation = sfluxavg - sfluxAvgRef;
+            double dailyFluxDeviation = sflux - sfluxavg;
+
+            bf[basisIndex] = avgFluxDeviation;                          // Linear in F10.7 average
+            bf[basisIndex + 1] = avgFluxDeviation * avgFluxDeviation;   // Quadratic in F10.7 average
+            bf[basisIndex + 2] = dailyFluxDeviation;                    // Linear in F10.7 daily variation
+            bf[basisIndex + 3] = dailyFluxDeviation * dailyFluxDeviation; // Quadratic in F10.7 daily variation
+            bf[basisIndex + 4] = dailyFluxDeviation * avgFluxDeviation;  // Cross term
+
+            basisIndex += Constants.NSfx;
+
+            return basisIndex;
+        }
+
+        /// <summary>
+        /// Builds additional linear terms including solar zenith angle and
+        /// solar flux modulation of various components.
+        /// This is the "CExtra" section which includes coupled/modulation terms.
+        /// </summary>
+        private static int BuildExtraLinearTerms(double[] bf, int startIndex,
+                                                 double sfluxavg, double sflux,
+                                                 double doy, double lst, double lat, double lon)
+        {
+            int basisIndex = startIndex;
+
+            if (basisIndex != Constants.CExtra)
+                throw new InvalidOperationException("Extra linear terms index mismatch");
+
+            double avgFluxDeviation = sfluxavg - sfluxAvgRef;
+            double dailyFluxDeviation = sflux - sfluxavg;
+            double solarZenithAngle = SolZen(doy, lst, lat, lon);
+
+            // Solar zenith angle logistic functions
+            bf[basisIndex] = -0.5 * Math.Tanh((solarZenithAngle - 98.0) / 6.0);     // For O, H
+            bf[basisIndex + 1] = -0.5 * Math.Tanh((solarZenithAngle - 101.5) / 20.0); // For NO
+
+            // Solar flux modulation of SZA terms
+            bf[basisIndex + 2] = avgFluxDeviation * bf[basisIndex];
+            bf[basisIndex + 3] = avgFluxDeviation * bf[basisIndex + 1];
+
+            // Solar flux modulation of Legendre polynomials
+            bf[basisIndex + 4] = avgFluxDeviation * plg[2, 0];  // P(2,0) modulation
+            bf[basisIndex + 5] = avgFluxDeviation * plg[4, 0];  // P(4,0) modulation
+
+            // Solar flux modulation of annual/semiannual global variations
+            bf[basisIndex + 6] = avgFluxDeviation * plg[0, 0] * cdoy[0];  // Global annual oscillation (AO)
+            bf[basisIndex + 7] = avgFluxDeviation * plg[0, 0] * sdoy[0];
+            bf[basisIndex + 8] = avgFluxDeviation * plg[0, 0] * cdoy[1];  // Global semiannual oscillation (SAO)
+            bf[basisIndex + 9] = avgFluxDeviation * plg[0, 0] * sdoy[1];
+
+            // Truncated quadratic F10.7a term
+            if (sfluxavg <= sfluxAvgQuadCutoff)
+            {
+                bf[basisIndex + 10] = avgFluxDeviation * avgFluxDeviation;
+            }
+            else
+            {
+                double cutoffDeviation = sfluxAvgQuadCutoff - sfluxAvgRef;
+                bf[basisIndex + 10] = cutoffDeviation * (2.0 * avgFluxDeviation - cutoffDeviation);
+            }
+
+            // Legendre polynomial modulation of truncated quadratic term
+            bf[basisIndex + 11] = bf[basisIndex + 10] * plg[2, 0];  // P(2,0) modulation
+            bf[basisIndex + 12] = bf[basisIndex + 10] * plg[4, 0];  // P(4,0) modulation
+
+            // Daily flux variation modulation
+            bf[basisIndex + 13] = dailyFluxDeviation * plg[2, 0];   // P(2,0) modulation of df
+            bf[basisIndex + 14] = dailyFluxDeviation * plg[4, 0];   // P(4,0) modulation of df
+
+            // Total: 15 terms in CExtra section
+            return basisIndex + 15;
+        }
+
+        // ==================================================================================================
+        // BASIS FUNCTION BUILDERS - NONLINEAR TERMS
+        // ==================================================================================================
+
+        /// <summary>
+        /// Builds nonlinear solar flux modulation terms.
+        /// This is the "CSfxMod" section (start of nonlinear terms).
+        /// </summary>
+        private static int BuildSolarFluxModulationTerms(double[] bf, int startIndex,
+                                                         double sfluxavg, double sflux)
+        {
+            int basisIndex = startIndex;
+
+            if (basisIndex != Constants.CSfxMod)
+                throw new InvalidOperationException("Solar flux modulation terms index mismatch");
+
+            double avgFluxDeviation = sfluxavg - sfluxAvgRef;
+            double dailyFluxDeviation = sflux - sfluxavg;
+
+            bf[basisIndex] = avgFluxDeviation;                              // Linear
+            bf[basisIndex + 1] = avgFluxDeviation * avgFluxDeviation;       // Quadratic
+            bf[basisIndex + 2] = dailyFluxDeviation;                        // Linear daily
+            bf[basisIndex + 3] = dailyFluxDeviation * dailyFluxDeviation;   // Quadratic daily
+            bf[basisIndex + 4] = dailyFluxDeviation * avgFluxDeviation;     // Cross term
+
+            basisIndex += Constants.NSfxMod;
+            return basisIndex;
+        }
+
+        /// <summary>
+        /// Builds geomagnetic activity terms for legacy compatibility.
+        /// </summary>
+        private static int BuildGeomagneticTerms(double[] bf, int startIndex,
+                                                double[] ap, double doy, double lst,
+                                                double lat, double lon, double utsec)
+        {
+            int basisIndex = startIndex;
+
+            if (basisIndex != Constants.CMag)
+                throw new InvalidOperationException("Geomagnetic terms index mismatch");
+
+            // Ap index history (7 values)
+            for (int i = 0; i < 7; i++)
+            {
+                bf[basisIndex + i] = ap[i] - 4.0;
+            }
+
+            // Additional geomagnetic basis functions
+            bf[basisIndex + 8] = Constants.Doy2Rad * doy;
+            bf[basisIndex + 9] = Constants.Lst2Rad * lst;
+            bf[basisIndex + 10] = Constants.Deg2Rad * lon;
+            bf[basisIndex + 11] = Constants.Lst2Rad * utsec / 3600.0;
+            bf[basisIndex + 12] = Math.Abs(lat);
+
+            basisIndex += 13;
+
+            // Legendre polynomials for m=0,1
+            for (int longitudeWaveNumber = 0; longitudeWaveNumber <= 1; longitudeWaveNumber++)
+            {
+                for (int latitudeDegree = 0; latitudeDegree <= Constants.AMaxN; latitudeDegree++)
+                {
+                    bf[basisIndex] = plg[latitudeDegree, longitudeWaveNumber];
+                    basisIndex++;
+                }
+            }
+
+            return basisIndex;
+        }
+
+        /// <summary>
+        /// Builds universal time dependent terms for high-latitude variations.
+        /// </summary>
+        private static void BuildUniversalTimeTerms(double[] bf, int startIndex,
+                                                   double utsec, double doy,
+                                                   double sfluxavg, double lon)
+        {
+            int basisIndex = startIndex;
+
+            if (basisIndex != Constants.CUt)
+                throw new InvalidOperationException("UT-dependent terms index mismatch");
+
+            bf[basisIndex] = Constants.Lst2Rad * utsec / 3600.0;
+            bf[basisIndex + 1] = Constants.Doy2Rad * doy;
+            bf[basisIndex + 2] = sfluxavg - sfluxAvgRef;  // avgFluxDeviation
+            bf[basisIndex + 3] = Constants.Deg2Rad * lon;
+            bf[basisIndex + 4] = plg[1, 0];
+            bf[basisIndex + 5] = plg[3, 0];
+            bf[basisIndex + 6] = plg[5, 0];
+            bf[basisIndex + 7] = plg[3, 2];
+            bf[basisIndex + 8] = plg[5, 2];
+        }
+
+        /// <summary>
+        /// Applies switches to enable/disable basis function terms.
+        /// </summary>
+        private static void ApplySwitches(double[] bf)
+        {
             for (int i = 0; i <= Constants.Mbf; i++)
             {
-                if (!Initialization.Swg[i]) bf[i] = 0.0;
+                if (!Initialization.Swg[i])
+                    bf[i] = 0.0;
             }
         }
 
         // ==================================================================================================
-        // SOLZEN: Calculate solar zenith angle (adapted from IRI subroutine)
+        // HELPER FUNCTIONS
         // ==================================================================================================
+
         /// <summary>
-        /// Calculate solar zenith angle
+        /// Calculate solar zenith angle (adapted from IRI subroutine)
         /// </summary>
         private static double SolZen(double ddd, double lst, double lat, double lon)
         {
             const double Humr = Constants.Pi / 12.0;
-            // const double Dumr = Constants.Pi / 182.5;
             double[] p = { 0.017203534, 0.034407068, 0.051610602, 0.068814136, 0.103221204 };
 
             double wlon = 360.0 - lon;
@@ -367,8 +585,9 @@ namespace NRLMSIS.Calculators
         }
 
         // ==================================================================================================
-        // SFLUXMOD: Legacy nonlinear modulation of intra-annual, tide, and SPW terms
+        // PUBLIC INTERFACE METHODS (PRESERVED FROM ORIGINAL FOR COMPATIBILITY)
         // ==================================================================================================
+
         /// <summary>
         /// Legacy nonlinear modulation of intra-annual, tide, and SPW terms
         /// </summary>
@@ -436,16 +655,9 @@ namespace NRLMSIS.Calculators
             return sum;
         }
 
-        // ==================================================================================================
-        // GEOMAG: Legacy nonlinear ap dependence (daily ap mode and ap history mode), including mixed
-        //         ap/UT/Longitude terms.
-        // Master switch control is as follows:
-        //   !swg(cmag) && !swg(cmag+1)     Do nothing: Return zero
-        //   swg(cmag) && swg(cmag+1)       Daily Ap mode
-        //   swg(cmag) != swg(cmag+1)       3-hour ap history mode
-        // ==================================================================================================
         /// <summary>
-        /// Legacy nonlinear ap dependence
+        /// Legacy nonlinear ap dependence (daily ap mode and ap history mode), including mixed
+        /// ap/UT/Longitude terms.
         /// </summary>
         public static double GeoMag(double[] p0, double[] bf, double[,] plg)
         {
@@ -530,15 +742,14 @@ namespace NRLMSIS.Calculators
             return geomag;
         }
 
-        // Helper function for GeoMag
+        /// <summary>
+        /// Helper function for GeoMag
+        /// </summary>
         private static double G0Fn(double a, double k00r, double k00s)
         {
             return a + (k00r - 1.0) * (a + (Math.Exp(-a * k00s) - 1.0) / k00s);
         }
 
-        // ==================================================================================================
-        // UTDEP: Legacy nonlinear UT dependence
-        // ==================================================================================================
         /// <summary>
         /// Legacy nonlinear UT dependence
         /// </summary>

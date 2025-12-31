@@ -21,6 +21,8 @@
 // **************************************************************************************************
 
 using System;
+using static NRLMSIS.Infrastructure.SplineWeightHelpers;
+using static NRLMSIS.Infrastructure.BoundsHelper;
 
 namespace NRLMSIS.Infrastructure
 {
@@ -144,7 +146,8 @@ namespace NRLMSIS.Infrastructure
         // BSPLINE: Returns array of nonzero b-spline values, for all orders up to specified order (max 6)
         // ==================================================================================================
         /// <summary>
-        /// Computes B-splines using input nodes and up to specified order
+        /// Computes B-splines using input nodes and up to specified order.
+        /// Uses Fortran-style indexing for compatibility with original MSIS implementation.
         /// </summary>
         /// <param name="x">Location at which splines are to be evaluated</param>
         /// <param name="nodes">Spline node locations (0-based array)</param>
@@ -156,101 +159,201 @@ namespace NRLMSIS.Infrastructure
         public static void BSpline(double x, double[] nodes, int nd, int kmax,
                                    double[,] eta, out double[,] S, out int i)
         {
-            // Initialize output array S[-5:0, 2:6]
-            // In C#, we'll use [0:5, 0:4] and map indices: S[j+5, k-2]
-            S = new double[6, 5]; // [-5:0] maps to [0:5], [2:6] maps to [0:4]
+            // Initialize output array: Fortran S[-5:0, 2:6] maps to C# S[0:5, 0:4]
+            S = new double[6, 5];
 
-            // Find index of last (rightmost) nonzero spline
+            // Find interval containing x (index of last rightmost nonzero spline)
+            i = FindInterval(x, nodes, nd);
+            if (i == -1 || i == nd)
+                return; // Outside bounds
+
+            // Initialize with linear splines (order 2)
+            SetSpline(S, 0, 2, (x - nodes[i]) * eta[i, 0]);
+            if (i > 0)
+                SetSpline(S, -1, 2, 1.0 - GetSpline(S, 0, 2));
+            if (i >= nd - 1)
+                SetSpline(S, 0, 2, 0.0); // Reset out-of-bounds spline
+
+            // Weight array: Fortran w[-4:0] maps to C# w[0:4]
+            double[] w = new double[5];
+
+            // Build quadratic splines (order 3)
+            BuildQuadraticSplines(x, nodes, nd, i, eta, S, w);
+
+            // Build cubic splines (order 4)
+            BuildCubicSplines(x, nodes, nd, i, eta, S, w);
+
+            // Build quartic splines (order 5)
+            BuildQuarticSplines(x, nodes, nd, i, eta, S, w);
+
+            if (kmax == 5)
+                return; // Exit if only order 5 needed
+
+            // Build quintic splines (order 6)
+            BuildQuinticSplines(x, nodes, nd, i, eta, S, w);
+        }
+
+        /// <summary>
+        /// Finds the interval containing x using binary search.
+        /// </summary>
+        /// <returns>Index i such that nodes[i] <= x < nodes[i+1], or -1/nd if out of bounds</returns>
+        private static int FindInterval(double x, double[] nodes, int nd)
+        {
             if (x >= nodes[nd])
-            {
-                i = nd;
-                return;
-            }
+                return nd;
             if (x <= nodes[0])
-            {
-                i = -1;
-                return;
-            }
+                return -1;
 
             int low = 0;
             int high = nd;
-            i = (low + high) / 2;
+            int i = (low + high) / 2;
+
             while (x < nodes[i] || x >= nodes[i + 1])
             {
                 if (x < nodes[i])
-                {
                     high = i;
-                }
                 else
-                {
                     low = i;
-                }
                 i = (low + high) / 2;
             }
 
-            // Initialize with linear splines (k=2)
-            S[5, 0] = (x - nodes[i]) * eta[i, 0]; // S[0,2] -> S[5,0]
-            if (i > 0) S[4, 0] = 1 - S[5, 0];      // S[-1,2] -> S[4,0]
-            if (i >= nd - 1) S[5, 0] = 0.0;        // Reset out-of-bounds spline to zero
+            return i;
+        }
 
-            // k = 3 (quadratic splines)
-            double[] w = new double[5]; // w[-4:0] maps to w[0:4]
-            w[4] = (x - nodes[i]) * eta[i, 1];     // w[0] -> w[4]
-            if (i != 0) w[3] = (x - nodes[i - 1]) * eta[i - 1, 1]; // w[-1] -> w[3]
+        /// <summary>
+        /// Builds quadratic (order 3) spline values.
+        /// </summary>
+        private static void BuildQuadraticSplines(double x, double[] nodes, int nd, int intervalIndex,
+                                                  double[,] eta, double[,] S, double[] w)
+        {
+            const int order = 3;
 
-            if (i < (nd - 2)) S[5, 1] = w[4] * S[5, 0]; // S[0,3]
-            if (((i - 1) >= 0) && ((i - 1) < (nd - 2)))
-                S[4, 1] = w[3] * S[4, 0] + (1.0 - w[4]) * S[5, 0]; // S[-1,3]
-            if ((i - 2) >= 0) S[3, 1] = (1.0 - w[3]) * S[4, 0]; // S[-2,3]
+            // Calculate weights
+            SetWeight(w, 0, (x - nodes[intervalIndex]) * eta[intervalIndex, 1]);
+            if (intervalIndex != 0)
+                SetWeight(w, -1, (x - nodes[intervalIndex - 1]) * eta[intervalIndex - 1, 1]);
 
-            // k = 4 (cubic splines)
-            for (int l = 0; l >= -2; l--)
+            // Build spline values using recursion
+            if (intervalIndex < nd - 2)
+                SetSpline(S, 0, order, GetWeight(w, 0) * GetSpline(S, 0, order - 1));
+
+            if (IsInBounds(intervalIndex - 1, 0, nd - 2))
             {
-                int j = i + l;
-                if (j < 0) break; // Skip out-of-bounds splines
-                w[l + 4] = (x - nodes[j]) * eta[j, 2]; // w[l] -> w[l+4]
+                double leftTerm = GetWeight(w, -1) * GetSpline(S, -1, order - 1);
+                double rightTerm = (1.0 - GetWeight(w, 0)) * GetSpline(S, 0, order - 1);
+                SetSpline(S, -1, order, leftTerm + rightTerm);
             }
 
-            if (i < (nd - 3)) S[5, 2] = w[4] * S[5, 1]; // S[0,4]
-            for (int l = -1; l >= -2; l--)
-            {
-                if (((i + l) >= 0) && ((i + l) < (nd - 3)))
-                    S[l + 5, 2] = w[l + 4] * S[l + 5, 1] + (1.0 - w[l + 1 + 4]) * S[l + 1 + 5, 1];
-            }
-            if ((i - 3) >= 0) S[2, 2] = (1.0 - w[2]) * S[3, 1]; // S[-3,4]
+            if (intervalIndex - 2 >= 0)
+                SetSpline(S, -2, order, (1.0 - GetWeight(w, -1)) * GetSpline(S, -1, order - 1));
+        }
 
-            // k = 5
-            for (int l = 0; l >= -3; l--)
-            {
-                int j = i + l;
-                if (j < 0) break; // Skip out-of-bounds splines
-                w[l + 4] = (x - nodes[j]) * eta[j, 3]; // w[l] -> w[l+4]
-            }
+        /// <summary>
+        /// Builds cubic (order 4) spline values.
+        /// </summary>
+        private static void BuildCubicSplines(double x, double[] nodes, int nd, int intervalIndex,
+                                              double[,] eta, double[,] S, double[] w)
+        {
+            const int order = 4;
 
-            if (i < (nd - 4)) S[5, 3] = w[4] * S[5, 2]; // S[0,5]
-            for (int l = -1; l >= -3; l--)
+            // Calculate weights for offsets 0 to -2
+            for (int offset = 0; offset >= -2; offset--)
             {
-                if (((i + l) >= 0) && ((i + l) < (nd - 4)))
-                    S[l + 5, 3] = w[l + 4] * S[l + 5, 2] + (1.0 - w[l + 1 + 4]) * S[l + 1 + 5, 2];
-            }
-            if ((i - 4) >= 0) S[1, 3] = (1.0 - w[1]) * S[2, 2]; // S[-4,5]
-            if (kmax == 5) return; // Exit if only 5th order spline is needed
+                int nodeIndex = intervalIndex + offset;
+                if (nodeIndex < 0) break;
 
-            // k = 6
-            for (int l = 0; l >= -4; l--)
-            {
-                int j = i + l;
-                if (j < 0) break; // Skip out-of-bounds splines
-                w[l + 4] = (x - nodes[j]) * eta[j, 4]; // w[l] -> w[l+4]
+                double weight = (x - nodes[nodeIndex]) * eta[nodeIndex, 2];
+                SetWeight(w, offset, weight);
             }
 
-            if (i < (nd - 5)) S[5, 4] = w[4] * S[5, 3]; // S[0,6]
-            for (int l = -1; l >= -4; l--)
+            // Build spline values using recursion
+            if (intervalIndex < nd - 3)
+                SetSpline(S, 0, order, GetWeight(w, 0) * GetSpline(S, 0, order - 1));
+
+            for (int offset = -1; offset >= -2; offset--)
             {
-                if (((i + l) >= 0) && ((i + l) < (nd - 5)))
-                    S[l + 5, 4] = w[l + 4] * S[l + 5, 3] + (1.0 - w[l + 1 + 4]) * S[l + 1 + 5, 3];
+                if (IsInBounds(intervalIndex, offset, 0, nd - 3))
+                {
+                    double leftTerm = GetWeight(w, offset) * GetSpline(S, offset, order - 1);
+                    double rightTerm = (1.0 - GetWeight(w, offset + 1)) * GetSpline(S, offset + 1, order - 1);
+                    SetSpline(S, offset, order, leftTerm + rightTerm);
+                }
             }
-            if ((i - 5) >= 0) S[0, 4] = (1.0 - w[0]) * S[1, 3]; // S[-5,6]
+
+            if (intervalIndex - 3 >= 0)
+                SetSpline(S, -3, order, (1.0 - GetWeight(w, -2)) * GetSpline(S, -2, order - 1));
+        }
+
+        /// <summary>
+        /// Builds quartic (order 5) spline values.
+        /// </summary>
+        private static void BuildQuarticSplines(double x, double[] nodes, int nd, int intervalIndex,
+                                                double[,] eta, double[,] S, double[] w)
+        {
+            const int order = 5;
+
+            // Calculate weights for offsets 0 to -3
+            for (int offset = 0; offset >= -3; offset--)
+            {
+                int nodeIndex = intervalIndex + offset;
+                if (nodeIndex < 0) break;
+
+                double weight = (x - nodes[nodeIndex]) * eta[nodeIndex, 3];
+                SetWeight(w, offset, weight);
+            }
+
+            // Build spline values using recursion
+            if (intervalIndex < nd - 4)
+                SetSpline(S, 0, order, GetWeight(w, 0) * GetSpline(S, 0, order - 1));
+
+            for (int offset = -1; offset >= -3; offset--)
+            {
+                if (IsInBounds(intervalIndex, offset, 0, nd - 4))
+                {
+                    double leftTerm = GetWeight(w, offset) * GetSpline(S, offset, order - 1);
+                    double rightTerm = (1.0 - GetWeight(w, offset + 1)) * GetSpline(S, offset + 1, order - 1);
+                    SetSpline(S, offset, order, leftTerm + rightTerm);
+                }
+            }
+
+            if (intervalIndex - 4 >= 0)
+                SetSpline(S, -4, order, (1.0 - GetWeight(w, -3)) * GetSpline(S, -3, order - 1));
+        }
+
+        /// <summary>
+        /// Builds quintic (order 6) spline values.
+        /// </summary>
+        private static void BuildQuinticSplines(double x, double[] nodes, int nd, int intervalIndex,
+                                                double[,] eta, double[,] S, double[] w)
+        {
+            const int order = 6;
+
+            // Calculate weights for offsets 0 to -4
+            for (int offset = 0; offset >= -4; offset--)
+            {
+                int nodeIndex = intervalIndex + offset;
+                if (nodeIndex < 0) break;
+
+                double weight = (x - nodes[nodeIndex]) * eta[nodeIndex, 4];
+                SetWeight(w, offset, weight);
+            }
+
+            // Build spline values using recursion
+            if (intervalIndex < nd - 5)
+                SetSpline(S, 0, order, GetWeight(w, 0) * GetSpline(S, 0, order - 1));
+
+            for (int offset = -1; offset >= -4; offset--)
+            {
+                if (IsInBounds(intervalIndex, offset, 0, nd - 5))
+                {
+                    double leftTerm = GetWeight(w, offset) * GetSpline(S, offset, order - 1);
+                    double rightTerm = (1.0 - GetWeight(w, offset + 1)) * GetSpline(S, offset + 1, order - 1);
+                    SetSpline(S, offset, order, leftTerm + rightTerm);
+                }
+            }
+
+            if (intervalIndex - 5 >= 0)
+                SetSpline(S, -5, order, (1.0 - GetWeight(w, -4)) * GetSpline(S, -4, order - 1));
         }
 
         // ==================================================================================================
@@ -294,10 +397,12 @@ namespace NRLMSIS.Infrastructure
         }
 
         // ==================================================================================================
-        // Helper method to access S array with Fortran-style indexing
+        // LEGACY HELPER METHODS - For backward compatibility
         // ==================================================================================================
+
         /// <summary>
-        /// Helper to access S array with Fortran-style negative indexing
+        /// Legacy helper to access S array with Fortran-style negative indexing.
+        /// Note: New code should use SplineWeightHelpers.GetSpline() instead.
         /// </summary>
         /// <param name="S">The spline array</param>
         /// <param name="splineIdx">Spline index (-5 to 0)</param>
@@ -305,15 +410,16 @@ namespace NRLMSIS.Infrastructure
         /// <returns>The spline value</returns>
         public static double GetSValue(double[,] S, int splineIdx, int order)
         {
-            return S[splineIdx + 5, order - 2];
+            return GetSpline(S, splineIdx, order);
         }
 
         /// <summary>
-        /// Helper to set S array with Fortran-style negative indexing
+        /// Legacy helper to set S array with Fortran-style negative indexing.
+        /// Note: New code should use SplineWeightHelpers.SetSpline() instead.
         /// </summary>
         public static void SetSValue(double[,] S, int splineIdx, int order, double value)
         {
-            S[splineIdx + 5, order - 2] = value;
+            SetSpline(S, splineIdx, order, value);
         }
     }
 }

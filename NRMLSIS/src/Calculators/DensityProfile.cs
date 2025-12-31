@@ -23,11 +23,13 @@
 
 using System;
 using NRLMSIS.Infrastructure;
+using static NRLMSIS.Infrastructure.DensityProfileColumns;
+using static NRLMSIS.Infrastructure.BasisFunctionExtractor;
 
 namespace NRLMSIS.Calculators
 {
     /// <summary>
-    /// Density profile parameters structure
+    /// Density profile parameters structure containing all vertical profile parameters for a species
     /// </summary>
     public class DensityParameters
     {
@@ -57,7 +59,7 @@ namespace NRLMSIS.Calculators
     }
 
     /// <summary>
-    /// Density profile functions for each species
+    /// Density profile functions for computing vertical species distributions
     /// </summary>
     public static class DensityProfile
     {
@@ -65,299 +67,153 @@ namespace NRLMSIS.Calculators
         // DensityParameters: Compute the species density profile parameters
         // ==================================================================================================
         /// <summary>
-        /// Compute the species density profile parameters
+        /// Compute the species density profile parameters for a given species.
+        /// This extracts parameters from the basis function coefficients and temperature profile.
         /// </summary>
-        /// <param name="ispec">Species index (2=N2, 3=O2, 4=O, 5=He, 6=H, 7=Ar, 8=N, 9=AnomalousO, 10=NO)</param>
-        /// <param name="gf">Array of horizontal and temporal basis function terms [0:maxnbf-1]</param>
-        /// <param name="tpro">Structure containing temperature vertical profile parameters</param>
-        /// <param name="dpro">Output: density vertical profile parameters</param>
-        public static void DensityParameters(int ispec, double[] gf, TemperatureProfile tpro, out DensityParameters dpro)
+        /// <param name="speciesIndex">Species index (2=N2, 3=O2, 4=O, 5=He, 6=H, 7=Ar, 8=N, 9=AnomalousO, 10=NO)</param>
+        /// <param name="basisFunctions">Array of horizontal and temporal basis function terms [0:maxnbf-1]</param>
+        /// <param name="temperatureProfile">Structure containing temperature vertical profile parameters</param>
+        /// <param name="densityProfile">Output: density vertical profile parameters</param>
+        public static void DensityParameters(int speciesIndex, double[] basisFunctions,
+                                            TemperatureProfile temperatureProfile,
+                                            out DensityParameters densityProfile)
         {
-            dpro = new DensityParameters();
-            dpro.ISpec = ispec;
+            densityProfile = new DensityParameters();
+            densityProfile.ISpec = speciesIndex;
 
-            int izf, i, i1, iz;
-            double Cterm, Rterm0, Rterm;
-            double[] bc = new double[2];
-            double Wi;
-            double[,] Si;
-            double Mzref;
+            // Extract basis function subsets used across multiple species
+            double[] geomagPrimary = ExtractGeomagneticPrimary(basisFunctions);
+            double[,] geomagSecondary = ExtractGeomagneticSecondary(basisFunctions);
+            double[] utDependent = ExtractUniversalTimeDependent(basisFunctions);
 
-            // Helper to extract geomag parameters and basis functions
-            double[] ExtractGeomagParms(BasisSubset subset, int col)
+            // Compute parameters based on species type
+            switch (speciesIndex)
             {
-                double[] parms = new double[Constants.NMag];
-                for (int idx = 0; idx < Constants.NMag; idx++)
-                {
-                    parms[idx] = subset.Beta[Constants.CMag + idx, col - subset.Bl];
-                }
-                return parms;
-            }
-
-            double[] geomagBf1 = new double[13];
-            Array.Copy(gf, Constants.CMag, geomagBf1, 0, 13);
-            double[,] geomagBf2 = new double[7, 2];
-            int gfOffset = Constants.CMag + 13;
-            for (int n = 0; n <= 6; n++)
-            {
-                geomagBf2[n, 0] = gf[gfOffset + n];
-                geomagBf2[n, 1] = gf[gfOffset + 7 + n];
-            }
-
-            double[] utdepParms;
-            double[] utdepBf = new double[9];
-            Array.Copy(gf, Constants.CUt, utdepBf, 0, 9);
-
-            switch (ispec)
-            {
-                case 2: // Molecular Nitrogen
-                    dpro.LnPhiF = Constants.LnVmr[ispec]; // ispec=2, access LnVmr[2]
-                    dpro.LnDRef = tpro.LnDTotF + dpro.LnPhiF;
-                    dpro.ZRef = Constants.ZetaF;
-                    dpro.ZMin = -1.0;
-                    dpro.ZHyd = Constants.ZetaF;
-                    dpro.ZetaM = DotProduct(Initialization.N2.Beta, 0, Constants.Mbf, 1, gf, 0, Constants.Mbf);
-                    dpro.HML = Initialization.N2.Beta[0, 2 - Initialization.N2.Bl];
-                    dpro.HMU = Initialization.N2.Beta[0, 3 - Initialization.N2.Bl];
-                    dpro.R = 0.0;
-                    if (Initialization.N2RFlag)
-                    {
-                        dpro.R = DotProduct(Initialization.N2.Beta, 0, Constants.Mbf, 7, gf, 0, Constants.Mbf);
-                    }
-                    dpro.ZetaR = Initialization.N2.Beta[0, 8 - Initialization.N2.Bl];
-                    dpro.HR = Initialization.N2.Beta[0, 9 - Initialization.N2.Bl];
+                case 2: // Molecular Nitrogen (N2)
+                    ComputeN2Parameters(densityProfile, basisFunctions, temperatureProfile,
+                                       geomagPrimary, geomagSecondary, utDependent);
                     break;
 
-                case 3: // Molecular Oxygen
-                    dpro.LnPhiF = Constants.LnVmr[ispec]; // ispec=3, access LnVmr[3]
-                    dpro.LnDRef = tpro.LnDTotF + dpro.LnPhiF;
-                    dpro.ZRef = Constants.ZetaF;
-                    dpro.ZMin = -1.0;
-                    dpro.ZHyd = Constants.ZetaF;
-                    dpro.ZetaM = Initialization.O2.Beta[0, 1 - Initialization.O2.Bl];
-                    dpro.HML = Initialization.O2.Beta[0, 2 - Initialization.O2.Bl];
-                    dpro.HMU = Initialization.O2.Beta[0, 3 - Initialization.O2.Bl];
-                    dpro.R = DotProduct(Initialization.O2.Beta, 0, Constants.Mbf, 7, gf, 0, Constants.Mbf);
-                    dpro.R += BasisFunctions.GeoMag(ExtractGeomagParms(Initialization.O2, 7), geomagBf1, geomagBf2);
-                    dpro.ZetaR = Initialization.O2.Beta[0, 8 - Initialization.O2.Bl];
-                    dpro.HR = Initialization.O2.Beta[0, 9 - Initialization.O2.Bl];
+                case 3: // Molecular Oxygen (O2)
+                    ComputeO2Parameters(densityProfile, basisFunctions, temperatureProfile,
+                                       geomagPrimary, geomagSecondary, utDependent);
                     break;
 
-                case 4: // Atomic Oxygen
-                    dpro.LnPhiF = 0.0;
-                    dpro.LnDRef = DotProduct(Initialization.O1.Beta, 0, Constants.Mbf, 0, gf, 0, Constants.Mbf);
-                    dpro.ZRef = Constants.ZetaRefO1;
-                    dpro.ZMin = Constants.NodesO1[3];
-                    dpro.ZHyd = Constants.ZetaRefO1;
-                    dpro.ZetaM = Initialization.O1.Beta[0, 1 - Initialization.O1.Bl];
-                    dpro.HML = Initialization.O1.Beta[0, 2 - Initialization.O1.Bl];
-                    dpro.HMU = Initialization.O1.Beta[0, 3 - Initialization.O1.Bl];
-                    dpro.C = DotProduct(Initialization.O1.Beta, 0, Constants.Mbf, 4, gf, 0, Constants.Mbf);
-                    dpro.ZetaC = Initialization.O1.Beta[0, 5 - Initialization.O1.Bl];
-                    dpro.HC = Initialization.O1.Beta[0, 6 - Initialization.O1.Bl];
-                    dpro.R = DotProduct(Initialization.O1.Beta, 0, Constants.Mbf, 7, gf, 0, Constants.Mbf);
-                    dpro.R += BasisFunctions.SFluxMod(7, gf, Initialization.O1, 0.0);
-                    dpro.R += BasisFunctions.GeoMag(ExtractGeomagParms(Initialization.O1, 7), geomagBf1, geomagBf2);
-                    utdepParms = new double[Constants.NUt];
-                    for (int idx = 0; idx < Constants.NUt; idx++)
-                    {
-                        utdepParms[idx] = Initialization.O1.Beta[Constants.CUt + idx, 7 - Initialization.O1.Bl];
-                    }
-                    dpro.R += BasisFunctions.UtDep(utdepParms, utdepBf);
-                    dpro.ZetaR = Initialization.O1.Beta[0, 8 - Initialization.O1.Bl];
-                    dpro.HR = Initialization.O1.Beta[0, 9 - Initialization.O1.Bl];
-                    // Unconstrained splines
-                    for (izf = 0; izf < Constants.NsplO1; izf++)
-                    {
-                        dpro.Cf[izf] = DotProduct(Initialization.O1.Beta, 0, Constants.Mbf, izf + 10, gf, 0, Constants.Mbf);
-                    }
+                case 4: // Atomic Oxygen (O)
+                    ComputeO1Parameters(densityProfile, basisFunctions, temperatureProfile,
+                                       geomagPrimary, geomagSecondary, utDependent);
                     break;
 
-                case 5: // Helium
-                    dpro.LnPhiF = Constants.LnVmr[ispec]; // ispec=5, access LnVmr[5]
-                    dpro.LnDRef = tpro.LnDTotF + dpro.LnPhiF;
-                    dpro.ZRef = Constants.ZetaF;
-                    dpro.ZMin = -1.0;
-                    dpro.ZHyd = Constants.ZetaF;
-                    dpro.ZetaM = Initialization.HE.Beta[0, 1 - Initialization.HE.Bl];
-                    dpro.HML = Initialization.HE.Beta[0, 2 - Initialization.HE.Bl];
-                    dpro.HMU = Initialization.HE.Beta[0, 3 - Initialization.HE.Bl];
-                    dpro.R = DotProduct(Initialization.HE.Beta, 0, Constants.Mbf, 7, gf, 0, Constants.Mbf);
-                    dpro.R += BasisFunctions.SFluxMod(7, gf, Initialization.HE, 1.0);
-                    dpro.R += BasisFunctions.GeoMag(ExtractGeomagParms(Initialization.HE, 7), geomagBf1, geomagBf2);
-                    utdepParms = new double[Constants.NUt];
-                    for (int idx = 0; idx < Constants.NUt; idx++)
-                    {
-                        utdepParms[idx] = Initialization.HE.Beta[Constants.CUt + idx, 7 - Initialization.HE.Bl];
-                    }
-                    dpro.R += BasisFunctions.UtDep(utdepParms, utdepBf);
-                    dpro.ZetaR = Initialization.HE.Beta[0, 8 - Initialization.HE.Bl];
-                    dpro.HR = Initialization.HE.Beta[0, 9 - Initialization.HE.Bl];
+                case 5: // Helium (He)
+                    ComputeHeParameters(densityProfile, basisFunctions, temperatureProfile,
+                                       geomagPrimary, geomagSecondary, utDependent);
                     break;
 
-                case 6: // Atomic Hydrogen
-                    dpro.LnPhiF = 0.0;
-                    dpro.LnDRef = DotProduct(Initialization.H1.Beta, 0, Constants.Mbf, 0, gf, 0, Constants.Mbf);
-                    dpro.ZRef = Constants.ZetaA;
-                    dpro.ZMin = 75.0;
-                    dpro.ZHyd = Constants.ZetaF;
-                    dpro.ZetaM = Initialization.H1.Beta[0, 1 - Initialization.H1.Bl];
-                    dpro.HML = Initialization.H1.Beta[0, 2 - Initialization.H1.Bl];
-                    dpro.HMU = Initialization.H1.Beta[0, 3 - Initialization.H1.Bl];
-                    dpro.C = DotProduct(Initialization.H1.Beta, 0, Constants.Mbf, 4, gf, 0, Constants.Mbf);
-                    dpro.ZetaC = DotProduct(Initialization.H1.Beta, 0, Constants.Mbf, 5, gf, 0, Constants.Mbf);
-                    dpro.HC = Initialization.H1.Beta[0, 6 - Initialization.H1.Bl];
-                    dpro.R = DotProduct(Initialization.H1.Beta, 0, Constants.Mbf, 7, gf, 0, Constants.Mbf);
-                    dpro.R += BasisFunctions.SFluxMod(7, gf, Initialization.H1, 0.0);
-                    dpro.R += BasisFunctions.GeoMag(ExtractGeomagParms(Initialization.H1, 7), geomagBf1, geomagBf2);
-                    utdepParms = new double[Constants.NUt];
-                    for (int idx = 0; idx < Constants.NUt; idx++)
-                    {
-                        utdepParms[idx] = Initialization.H1.Beta[Constants.CUt + idx, 7 - Initialization.H1.Bl];
-                    }
-                    dpro.R += BasisFunctions.UtDep(utdepParms, utdepBf);
-                    dpro.ZetaR = Initialization.H1.Beta[0, 8 - Initialization.H1.Bl];
-                    dpro.HR = Initialization.H1.Beta[0, 9 - Initialization.H1.Bl];
+                case 6: // Atomic Hydrogen (H)
+                    ComputeH1Parameters(densityProfile, basisFunctions, temperatureProfile,
+                                       geomagPrimary, geomagSecondary, utDependent);
                     break;
 
-                case 7: // Argon
-                    dpro.LnPhiF = Constants.LnVmr[ispec]; // ispec=7, access LnVmr[7]
-                    dpro.LnDRef = tpro.LnDTotF + dpro.LnPhiF;
-                    dpro.ZRef = Constants.ZetaF;
-                    dpro.ZMin = -1.0;
-                    dpro.ZHyd = Constants.ZetaF;
-                    dpro.ZetaM = Initialization.AR.Beta[0, 1 - Initialization.AR.Bl];
-                    dpro.HML = Initialization.AR.Beta[0, 2 - Initialization.AR.Bl];
-                    dpro.HMU = Initialization.AR.Beta[0, 3 - Initialization.AR.Bl];
-                    dpro.R = DotProduct(Initialization.AR.Beta, 0, Constants.Mbf, 7, gf, 0, Constants.Mbf);
-                    dpro.R += BasisFunctions.GeoMag(ExtractGeomagParms(Initialization.AR, 7), geomagBf1, geomagBf2);
-                    utdepParms = new double[Constants.NUt];
-                    for (int idx = 0; idx < Constants.NUt; idx++)
-                    {
-                        utdepParms[idx] = Initialization.AR.Beta[Constants.CUt + idx, 7 - Initialization.AR.Bl];
-                    }
-                    dpro.R += BasisFunctions.UtDep(utdepParms, utdepBf);
-                    dpro.ZetaR = Initialization.AR.Beta[0, 8 - Initialization.AR.Bl];
-                    dpro.HR = Initialization.AR.Beta[0, 9 - Initialization.AR.Bl];
+                case 7: // Argon (Ar)
+                    ComputeArParameters(densityProfile, basisFunctions, temperatureProfile,
+                                       geomagPrimary, geomagSecondary, utDependent);
                     break;
 
-                case 8: // Atomic Nitrogen
-                    dpro.LnPhiF = 0.0;
-                    dpro.LnDRef = DotProduct(Initialization.N1.Beta, 0, Constants.Mbf, 0, gf, 0, Constants.Mbf);
-                    dpro.LnDRef += BasisFunctions.SFluxMod(0, gf, Initialization.N1, 0.0);
-                    dpro.LnDRef += BasisFunctions.GeoMag(ExtractGeomagParms(Initialization.N1, 0), geomagBf1, geomagBf2);
-                    utdepParms = new double[Constants.NUt];
-                    for (int idx = 0; idx < Constants.NUt; idx++)
-                    {
-                        utdepParms[idx] = Initialization.N1.Beta[Constants.CUt + idx, 0 - Initialization.N1.Bl];
-                    }
-                    dpro.LnDRef += BasisFunctions.UtDep(utdepParms, utdepBf);
-                    dpro.ZRef = Constants.ZetaB;
-                    dpro.ZMin = 90.0;
-                    dpro.ZHyd = Constants.ZetaF;
-                    dpro.ZetaM = Initialization.N1.Beta[0, 1 - Initialization.N1.Bl];
-                    dpro.HML = Initialization.N1.Beta[0, 2 - Initialization.N1.Bl];
-                    dpro.HMU = Initialization.N1.Beta[0, 3 - Initialization.N1.Bl];
-                    dpro.C = Initialization.N1.Beta[0, 4 - Initialization.N1.Bl];
-                    dpro.ZetaC = Initialization.N1.Beta[0, 5 - Initialization.N1.Bl];
-                    dpro.HC = Initialization.N1.Beta[0, 6 - Initialization.N1.Bl];
-                    dpro.R = DotProduct(Initialization.N1.Beta, 0, Constants.Mbf, 7, gf, 0, Constants.Mbf);
-                    dpro.ZetaR = Initialization.N1.Beta[0, 8 - Initialization.N1.Bl];
-                    dpro.HR = Initialization.N1.Beta[0, 9 - Initialization.N1.Bl];
+                case 8: // Atomic Nitrogen (N)
+                    ComputeN1Parameters(densityProfile, basisFunctions, temperatureProfile,
+                                       geomagPrimary, geomagSecondary, utDependent);
                     break;
 
-                case 9: // Anomalous Oxygen
-                    dpro.LnDRef = DotProduct(Initialization.OA.Beta, 0, Constants.Mbf, 0, gf, 0, Constants.Mbf);
-                    dpro.LnDRef += BasisFunctions.GeoMag(ExtractGeomagParms(Initialization.OA, 0), geomagBf1, geomagBf2);
-                    dpro.ZRef = Constants.ZetaRefOA;
-                    dpro.ZMin = 120.0;
-                    dpro.ZHyd = 0.0;
-                    dpro.C = Initialization.OA.Beta[0, 4 - Initialization.OA.Bl];
-                    dpro.ZetaC = Initialization.OA.Beta[0, 5 - Initialization.OA.Bl];
-                    dpro.HC = Initialization.OA.Beta[0, 6 - Initialization.OA.Bl];
-                    return; // No further parameters needed for legacy anomalous oxygen profile
+                case 9: // Anomalous Oxygen (O*)
+                    ComputeOAParameters(densityProfile, basisFunctions, temperatureProfile,
+                                       geomagPrimary, geomagSecondary, utDependent);
+                    break;
 
-                case 10: // Nitric Oxide
-                    // Skip if parameters are not defined
-                    if (Initialization.NO.Beta[0, 0 - Initialization.NO.Bl] == 0.0)
-                    {
-                        dpro.LnDRef = 0.0;
-                        return;
-                    }
-                    dpro.LnPhiF = 0.0;
-                    dpro.LnDRef = DotProduct(Initialization.NO.Beta, 0, Constants.Mbf, 0, gf, 0, Constants.Mbf);
-                    dpro.LnDRef += BasisFunctions.GeoMag(ExtractGeomagParms(Initialization.NO, 0), geomagBf1, geomagBf2);
-                    dpro.ZRef = Constants.ZetaRefNO;
-                    dpro.ZMin = 72.5; // Cut off profile below 72.5 km
-                    dpro.ZHyd = Constants.ZetaRefNO;
-                    dpro.ZetaM = DotProduct(Initialization.NO.Beta, 0, Constants.Mbf, 1, gf, 0, Constants.Mbf);
-                    dpro.HML = DotProduct(Initialization.NO.Beta, 0, Constants.Mbf, 2, gf, 0, Constants.Mbf);
-                    dpro.HMU = DotProduct(Initialization.NO.Beta, 0, Constants.Mbf, 3, gf, 0, Constants.Mbf);
-                    dpro.C = DotProduct(Initialization.NO.Beta, 0, Constants.Mbf, 4, gf, 0, Constants.Mbf);
-                    dpro.C += BasisFunctions.GeoMag(ExtractGeomagParms(Initialization.NO, 4), geomagBf1, geomagBf2);
-                    dpro.ZetaC = DotProduct(Initialization.NO.Beta, 0, Constants.Mbf, 5, gf, 0, Constants.Mbf);
-                    dpro.HC = DotProduct(Initialization.NO.Beta, 0, Constants.Mbf, 6, gf, 0, Constants.Mbf);
-                    dpro.R = DotProduct(Initialization.NO.Beta, 0, Constants.Mbf, 7, gf, 0, Constants.Mbf);
-                    dpro.ZetaR = DotProduct(Initialization.NO.Beta, 0, Constants.Mbf, 8, gf, 0, Constants.Mbf);
-                    dpro.HR = DotProduct(Initialization.NO.Beta, 0, Constants.Mbf, 9, gf, 0, Constants.Mbf);
-                    // Unconstrained splines
-                    for (izf = 0; izf < Constants.NsplNO; izf++)
-                    {
-                        dpro.Cf[izf] = DotProduct(Initialization.NO.Beta, 0, Constants.Mbf, izf + 10, gf, 0, Constants.Mbf);
-                        dpro.Cf[izf] += BasisFunctions.GeoMag(ExtractGeomagParms(Initialization.NO, izf + 10), geomagBf1, geomagBf2);
-                    }
+                case 10: // Nitric Oxide (NO)
+                    ComputeNOParameters(densityProfile, basisFunctions, temperatureProfile,
+                                       geomagPrimary, geomagSecondary, utDependent);
                     break;
 
                 default:
-                    throw new InvalidOperationException("Species not yet implemented");
+                    throw new ArgumentException($"Invalid species index: {speciesIndex}");
             }
 
-            // Compute piecewise mass profile values and integration terms
+            // Compute piecewise mass profile and integration terms
+            ComputeMassProfileAndIntegrals(speciesIndex, basisFunctions, temperatureProfile, densityProfile);
+        }
+
+        // ==================================================================================================
+        // POST-PROCESSING: Mass Profile and Integration Terms
+        // ==================================================================================================
+
+        /// <summary>
+        /// Computes piecewise mass profile nodes, slopes, and integration terms.
+        /// This must be called after species-specific parameters are set.
+        /// </summary>
+        private static void ComputeMassProfileAndIntegrals(int speciesIndex, double[] basisFunctions,
+                                                          TemperatureProfile tpro, DensityParameters dpro)
+        {
+            // Compute piecewise mass profile node heights
             dpro.ZetaMi[0] = dpro.ZetaM - 2.0 * dpro.HML;
             dpro.ZetaMi[1] = dpro.ZetaM - dpro.HML;
             dpro.ZetaMi[2] = dpro.ZetaM;
             dpro.ZetaMi[3] = dpro.ZetaM + dpro.HMU;
             dpro.ZetaMi[4] = dpro.ZetaM + 2.0 * dpro.HMU;
+
+            // Compute effective masses at nodes
             dpro.Mi[0] = Constants.Mbar;
-            dpro.Mi[4] = Constants.SpecMass[ispec]; // Access SpecMass with ispec directly (2-10)
+            dpro.Mi[4] = Constants.SpecMass[speciesIndex];
             dpro.Mi[2] = (dpro.Mi[0] + dpro.Mi[4]) / 2.0;
             double delM = Constants.Tanh1 * (dpro.Mi[4] - dpro.Mi[0]) / 2.0;
             dpro.Mi[1] = dpro.Mi[2] - delM;
             dpro.Mi[3] = dpro.Mi[2] + delM;
-            for (i = 0; i <= 3; i++)
+
+            // Compute slopes between nodes
+            for (int i = 0; i <= 3; i++)
             {
                 dpro.AMi[i] = (dpro.Mi[i + 1] - dpro.Mi[i]) / (dpro.ZetaMi[i + 1] - dpro.ZetaMi[i]);
             }
 
-            for (i = 0; i <= 4; i++)
+            // Compute second indefinite integral W at nodes
+            for (int i = 0; i <= 4; i++)
             {
                 double delz = dpro.ZetaMi[i] - Constants.ZetaB;
                 if (dpro.ZetaMi[i] < Constants.ZetaB)
                 {
-                    Utilities.BSpline(dpro.ZetaMi[i], Constants.NodesTN, Constants.Nd + 2, 6, Initialization.EtaTN, out Si, out iz);
+                    // Below turbopause: use B-spline interpolation
+                    Utilities.BSpline(dpro.ZetaMi[i], Constants.NodesTN, Constants.Nd + 2, 6,
+                                    Initialization.EtaTN, out double[,] Si, out int iz);
+
                     // Extract Si[-5:0, 6] -> Si[0:5, 4]
-                    Wi = 0.0;
+                    double Wi = 0.0;
                     for (int j = 0; j <= 5; j++)
                     {
-                        Wi += tpro.Gamma[iz - 5 + j] * Si[j, 4];
+                        int gammaIndex = iz - 5 + j;
+                        if (gammaIndex >= 0 && gammaIndex <= Constants.Nl)
+                        {
+                            Wi += tpro.Gamma[gammaIndex] * Si[j, 4];
+                        }
                     }
                     dpro.WMi[i] = Wi + tpro.CVs * delz + tpro.CWs;
                 }
                 else
                 {
+                    // Above turbopause: analytic formula
                     dpro.WMi[i] = (0.5 * delz * delz + Utilities.Dilog(tpro.B * Math.Exp(-tpro.Sigma * delz)) / tpro.SigmaSq) / tpro.Tex
                                 + tpro.CVb * delz + tpro.CWb;
                 }
             }
 
+            // Compute cumulative adjustment terms X at nodes
             dpro.XMi[0] = -dpro.AMi[0] * dpro.WMi[0];
-            for (i = 1; i <= 3; i++)
+            for (int i = 1; i <= 3; i++)
             {
                 dpro.XMi[i] = dpro.XMi[i - 1] - dpro.WMi[i] * (dpro.AMi[i] - dpro.AMi[i - 1]);
             }
             dpro.XMi[4] = dpro.XMi[3] + dpro.WMi[4] * dpro.AMi[3];
 
-            // Calculate hydrostatic integral at reference height, and copy temperature
+            // Calculate hydrostatic integral at reference height and copy temperature
+            double Mzref;
             if (dpro.ZRef == Constants.ZetaF)
             {
                 Mzref = Constants.Mbar;
@@ -366,24 +222,14 @@ namespace NRLMSIS.Calculators
             }
             else if (dpro.ZRef == Constants.ZetaB)
             {
-                Mzref = Pwmp(dpro.ZRef, dpro.ZetaMi, dpro.Mi, dpro.AMi);
+                Mzref = ComputePiecewiseMass(dpro.ZRef, dpro.ZetaMi, dpro.Mi, dpro.AMi);
                 dpro.TRef = tpro.Tb0;
                 dpro.IzRef = 0.0;
+
                 if ((Constants.ZetaB > dpro.ZetaMi[0]) && (Constants.ZetaB < dpro.ZetaMi[4]))
                 {
-                    i = 0;
-                    for (i1 = 1; i1 <= 3; i1++)
-                    {
-                        if (Constants.ZetaB < dpro.ZetaMi[i1])
-                        {
-                            break;
-                        }
-                        else
-                        {
-                            i = i1;
-                        }
-                    }
-                    dpro.IzRef = dpro.IzRef - dpro.XMi[i];
+                    int nodeIndex = FindNodeIndex(Constants.ZetaB, dpro.ZetaMi);
+                    dpro.IzRef = dpro.IzRef - dpro.XMi[nodeIndex];
                 }
                 else
                 {
@@ -392,24 +238,14 @@ namespace NRLMSIS.Calculators
             }
             else if (dpro.ZRef == Constants.ZetaA)
             {
-                Mzref = Pwmp(dpro.ZRef, dpro.ZetaMi, dpro.Mi, dpro.AMi);
+                Mzref = ComputePiecewiseMass(dpro.ZRef, dpro.ZetaMi, dpro.Mi, dpro.AMi);
                 dpro.TRef = tpro.TZetaA;
                 dpro.IzRef = Mzref * tpro.VZetaA;
+
                 if ((Constants.ZetaA > dpro.ZetaMi[0]) && (Constants.ZetaA < dpro.ZetaMi[4]))
                 {
-                    i = 0;
-                    for (i1 = 1; i1 <= 3; i1++)
-                    {
-                        if (Constants.ZetaA < dpro.ZetaMi[i1])
-                        {
-                            break;
-                        }
-                        else
-                        {
-                            i = i1;
-                        }
-                    }
-                    dpro.IzRef = dpro.IzRef - (dpro.AMi[i] * tpro.WZetaA + dpro.XMi[i]);
+                    int nodeIndex = FindNodeIndex(Constants.ZetaA, dpro.ZetaMi);
+                    dpro.IzRef = dpro.IzRef - (dpro.AMi[nodeIndex] * tpro.WZetaA + dpro.XMi[nodeIndex]);
                 }
                 else
                 {
@@ -422,247 +258,747 @@ namespace NRLMSIS.Calculators
             }
 
             // C1 constraint for O1 at 85 km
-            if (ispec == 4)
+            if (speciesIndex == 4)
             {
-                Cterm = dpro.C * Math.Exp(-(dpro.ZRef - dpro.ZetaC) / dpro.HC);
-                Rterm0 = Math.Tanh((dpro.ZRef - dpro.ZetaR) / (Initialization.HRFactO1Ref * dpro.HR));
-                Rterm = dpro.R * (1 + Rterm0);
-                bc[0] = dpro.LnDRef - Cterm + Rterm - dpro.Cf[7] * Constants.C1O1Adj[0];
-                bc[1] = -Mzref * Constants.G0DivKB / tpro.TZetaA
-                        - tpro.DlnTdzA
-                        + Cterm / dpro.HC
-                        + Rterm * (1 - Rterm0) / dpro.HR * Initialization.DHRFactO1Ref
-                        - dpro.Cf[7] * Constants.C1O1Adj[1];
-                // Compute coefficients for constrained splines: bc * c1o1
-                for (int idx = 8; idx <= 9; idx++)
-                {
-                    dpro.Cf[idx] = 0.0;
-                    for (int row = 0; row < 2; row++)
-                    {
-                        dpro.Cf[idx] += bc[row] * Constants.C1O1[row, idx - 8];
-                    }
-                }
+                ApplyO1Constraint(basisFunctions, tpro, dpro, Mzref);
             }
 
             // C1 constraint for NO at 122.5 km
-            if (ispec == 10)
+            if (speciesIndex == 10)
             {
-                Cterm = dpro.C * Math.Exp(-(dpro.ZRef - dpro.ZetaC) / dpro.HC);
-                Rterm0 = Math.Tanh((dpro.ZRef - dpro.ZetaR) / (Initialization.HRFactNORef * dpro.HR));
-                Rterm = dpro.R * (1 + Rterm0);
-                bc[0] = dpro.LnDRef - Cterm + Rterm - dpro.Cf[7] * Constants.C1NOAdj[0];
-                bc[1] = -Mzref * Constants.G0DivKB / tpro.Tb0
-                        - tpro.Tgb0 / tpro.Tb0
-                        + Cterm / dpro.HC
-                        + Rterm * (1 - Rterm0) / dpro.HR * Initialization.DHRFactNORef
-                        - dpro.Cf[7] * Constants.C1NOAdj[1];
-                // Compute coefficients for constrained splines: bc * c1NO
-                for (int idx = 8; idx <= 9; idx++)
+                ApplyNOConstraint(basisFunctions, tpro, dpro, Mzref);
+            }
+        }
+
+        /// <summary>
+        /// Applies C1 continuity constraint for atomic oxygen at 85 km
+        /// </summary>
+        private static void ApplyO1Constraint(double[] gf, TemperatureProfile tpro, DensityParameters dpro, double Mzref)
+        {
+            double Cterm = dpro.C * Math.Exp(-(dpro.ZRef - dpro.ZetaC) / dpro.HC);
+            double Rterm0 = Math.Tanh((dpro.ZRef - dpro.ZetaR) / (Initialization.HRFactO1Ref * dpro.HR));
+            double Rterm = dpro.R * (1.0 + Rterm0);
+
+            double[] bc = new double[2];
+            bc[0] = dpro.LnDRef - Cterm + Rterm - dpro.Cf[7] * Constants.C1O1Adj[0];
+            bc[1] = -Mzref * Constants.G0DivKB / tpro.TZetaA
+                   - tpro.DlnTdzA
+                   + Cterm / dpro.HC
+                   + Rterm * (1.0 - Rterm0) / dpro.HR * Initialization.DHRFactO1Ref
+                   - dpro.Cf[7] * Constants.C1O1Adj[1];
+
+            // Compute coefficients for constrained splines: bc * C1O1
+            for (int idx = 8; idx <= 9; idx++)
+            {
+                dpro.Cf[idx] = 0.0;
+                for (int row = 0; row < 2; row++)
                 {
-                    dpro.Cf[idx] = 0.0;
-                    for (int row = 0; row < 2; row++)
-                    {
-                        dpro.Cf[idx] += bc[row] * Constants.C1NO[row, idx - 8];
-                    }
+                    dpro.Cf[idx] += bc[row] * Constants.C1O1[row, idx - 8];
+                }
+            }
+        }
+
+        /// <summary>
+        /// Applies C1 continuity constraint for nitric oxide at 122.5 km
+        /// </summary>
+        private static void ApplyNOConstraint(double[] gf, TemperatureProfile tpro, DensityParameters dpro, double Mzref)
+        {
+            double Cterm = dpro.C * Math.Exp(-(dpro.ZRef - dpro.ZetaC) / dpro.HC);
+            double Rterm0 = Math.Tanh((dpro.ZRef - dpro.ZetaR) / (Initialization.HRFactNORef * dpro.HR));
+            double Rterm = dpro.R * (1.0 + Rterm0);
+
+            double[] bc = new double[2];
+            bc[0] = dpro.LnDRef - Cterm + Rterm - dpro.Cf[7] * Constants.C1NOAdj[0];
+            bc[1] = -Mzref * Constants.G0DivKB / tpro.Tb0
+                   - tpro.Tgb0 / tpro.Tb0
+                   + Cterm / dpro.HC
+                   + Rterm * (1.0 - Rterm0) / dpro.HR * Initialization.DHRFactNORef
+                   - dpro.Cf[7] * Constants.C1NOAdj[1];
+
+            // Compute coefficients for constrained splines: bc * C1NO
+            for (int idx = 8; idx <= 9; idx++)
+            {
+                dpro.Cf[idx] = 0.0;
+                for (int row = 0; row < 2; row++)
+                {
+                    dpro.Cf[idx] += bc[row] * Constants.C1NO[row, idx - 8];
                 }
             }
         }
 
         // ==================================================================================================
-        // DFNX: Compute a species density at specified geopotential height
+        // SPECIES-SPECIFIC PARAMETER COMPUTATION
         // ==================================================================================================
-        /// <summary>
-        /// Compute a species density at specified geopotential height
-        /// </summary>
-        /// <param name="z">Geopotential height (km)</param>
-        /// <param name="tnz">Temperature at z</param>
-        /// <param name="lndtotz">Total number density at z</param>
-        /// <param name="Vz">First indefinite integral of 1/T at z</param>
-        /// <param name="Wz">Second indefinite integral of 1/T at z</param>
-        /// <param name="HRfact">Reduction factor for chemical/dynamical correction scale height</param>
-        /// <param name="tpro">Temperature vertical profile parameters</param>
-        /// <param name="dpro">Density vertical profile parameters</param>
-        /// <returns>Species density (m^-3)</returns>
-        public static double DfnX(double z, double tnz, double lndtotz, double Vz, double Wz,
-                                 double HRfact, TemperatureProfile tpro, DensityParameters dpro)
-        {
-            int i, i1, iz;
-            double Mz;
-            double[,] Sz;
-            double Ihyd;
-            double ccor;
-            double dfnx;
 
+        /// <summary>
+        /// Computes density profile parameters for Molecular Nitrogen (N2)
+        /// </summary>
+        private static void ComputeN2Parameters(DensityParameters dpro, double[] gf,
+                                                TemperatureProfile tpro,
+                                                double[] geomagPrimary, double[,] geomagSecondary,
+                                                double[] utDependent)
+        {
+            var subset = Initialization.N2;
+            int bl = subset.Bl;
+
+            // Reference parameters
+            dpro.LnPhiF = Constants.LnVmr[2];
+            dpro.LnDRef = tpro.LnDTotF + dpro.LnPhiF;
+            dpro.ZRef = Constants.ZetaF;
+            dpro.ZMin = -1.0;
+            dpro.ZHyd = Constants.ZetaF;
+
+            // Turbopause and scale heights
+            dpro.ZetaM = DotProduct(subset.Beta, 0, Constants.Mbf, TurbopauseHeight, gf, 0, Constants.Mbf);
+            dpro.HML = subset.Beta[0, LowerScaleHeight - bl];
+            dpro.HMU = subset.Beta[0, UpperScaleHeight - bl];
+
+            // Chemical/dynamical term
+            dpro.R = 0.0;
+            if (Initialization.N2RFlag)
+            {
+                dpro.R = DotProduct(subset.Beta, 0, Constants.Mbf, ChemicalDynamicCoefficient, gf, 0, Constants.Mbf);
+            }
+            dpro.ZetaR = subset.Beta[0, ChemicalDynamicReferenceHeight - bl];
+            dpro.HR = subset.Beta[0, ChemicalDynamicScaleHeight - bl];
+        }
+
+        /// <summary>
+        /// Computes density profile parameters for Molecular Oxygen (O2)
+        /// </summary>
+        private static void ComputeO2Parameters(DensityParameters dpro, double[] gf,
+                                                TemperatureProfile tpro,
+                                                double[] geomagPrimary, double[,] geomagSecondary,
+                                                double[] utDependent)
+        {
+            var subset = Initialization.O2;
+            int bl = subset.Bl;
+
+            // Reference parameters
+            dpro.LnPhiF = Constants.LnVmr[3];
+            dpro.LnDRef = tpro.LnDTotF + dpro.LnPhiF;
+            dpro.ZRef = Constants.ZetaF;
+            dpro.ZMin = -1.0;
+            dpro.ZHyd = Constants.ZetaF;
+
+            // Turbopause and scale heights
+            dpro.ZetaM = subset.Beta[0, TurbopauseHeight - bl];
+            dpro.HML = subset.Beta[0, LowerScaleHeight - bl];
+            dpro.HMU = subset.Beta[0, UpperScaleHeight - bl];
+
+            // Chemical/dynamical term (includes geomagnetic effect)
+            dpro.R = DotProduct(subset.Beta, 0, Constants.Mbf, ChemicalDynamicCoefficient, gf, 0, Constants.Mbf);
+            dpro.R += BasisFunctions.GeoMag(
+                ExtractGeomagneticParameters(subset, ChemicalDynamicCoefficient),
+                geomagPrimary, geomagSecondary);
+
+            dpro.ZetaR = subset.Beta[0, ChemicalDynamicReferenceHeight - bl];
+            dpro.HR = subset.Beta[0, ChemicalDynamicScaleHeight - bl];
+        }
+
+        /// <summary>
+        /// Computes density profile parameters for Atomic Oxygen (O)
+        /// </summary>
+        private static void ComputeO1Parameters(DensityParameters dpro, double[] gf,
+                                                TemperatureProfile tpro,
+                                                double[] geomagPrimary, double[,] geomagSecondary,
+                                                double[] utDependent)
+        {
+            var subset = Initialization.O1;
+            int bl = subset.Bl;
+
+            // Reference parameters
+            dpro.LnPhiF = 0.0;
+            dpro.LnDRef = DotProduct(subset.Beta, 0, Constants.Mbf, LogReferenceDensity, gf, 0, Constants.Mbf);
+            dpro.ZRef = Constants.ZetaRefO1;
+            dpro.ZMin = Constants.NodesO1[3];
+            dpro.ZHyd = Constants.ZetaRefO1;
+
+            // Turbopause and scale heights
+            dpro.ZetaM = subset.Beta[0, TurbopauseHeight - bl];
+            dpro.HML = subset.Beta[0, LowerScaleHeight - bl];
+            dpro.HMU = subset.Beta[0, UpperScaleHeight - bl];
+
+            // Chapman term
+            dpro.C = DotProduct(subset.Beta, 0, Constants.Mbf, ChapmanCoefficient, gf, 0, Constants.Mbf);
+            dpro.ZetaC = subset.Beta[0, ChapmanReferenceHeight - bl];
+            dpro.HC = subset.Beta[0, ChapmanScaleHeight - bl];
+
+            // Chemical/dynamical term (includes solar flux, geomagnetic, and UT effects)
+            dpro.R = DotProduct(subset.Beta, 0, Constants.Mbf, ChemicalDynamicCoefficient, gf, 0, Constants.Mbf);
+            dpro.R += BasisFunctions.SFluxMod(ChemicalDynamicCoefficient, gf, subset, 0.0);
+            dpro.R += BasisFunctions.GeoMag(
+                ExtractGeomagneticParameters(subset, ChemicalDynamicCoefficient),
+                geomagPrimary, geomagSecondary);
+            dpro.R += BasisFunctions.UtDep(
+                ExtractUTParameters(subset, ChemicalDynamicCoefficient),
+                utDependent);
+
+            dpro.ZetaR = subset.Beta[0, ChemicalDynamicReferenceHeight - bl];
+            dpro.HR = subset.Beta[0, ChemicalDynamicScaleHeight - bl];
+
+            // Unconstrained splines for O
+            for (int splineIndex = 0; splineIndex < Constants.NsplO1; splineIndex++)
+            {
+                int columnIndex = splineIndex + 10;  // Spline coefficients start at column 10
+                dpro.Cf[splineIndex] = DotProduct(subset.Beta, 0, Constants.Mbf, columnIndex, gf, 0, Constants.Mbf);
+            }
+        }
+
+        /// <summary>
+        /// Computes density profile parameters for Helium (He)
+        /// </summary>
+        private static void ComputeHeParameters(DensityParameters dpro, double[] gf,
+                                                TemperatureProfile tpro,
+                                                double[] geomagPrimary, double[,] geomagSecondary,
+                                                double[] utDependent)
+        {
+            var subset = Initialization.HE;
+            int bl = subset.Bl;
+
+            // Reference parameters
+            dpro.LnPhiF = Constants.LnVmr[5];
+            dpro.LnDRef = tpro.LnDTotF + dpro.LnPhiF;
+            dpro.ZRef = Constants.ZetaF;
+            dpro.ZMin = -1.0;
+            dpro.ZHyd = Constants.ZetaF;
+
+            // Turbopause and scale heights
+            dpro.ZetaM = subset.Beta[0, TurbopauseHeight - bl];
+            dpro.HML = subset.Beta[0, LowerScaleHeight - bl];
+            dpro.HMU = subset.Beta[0, UpperScaleHeight - bl];
+
+            // Chemical/dynamical term (includes solar flux, geomagnetic, and UT effects)
+            dpro.R = DotProduct(subset.Beta, 0, Constants.Mbf, ChemicalDynamicCoefficient, gf, 0, Constants.Mbf);
+            dpro.R += BasisFunctions.SFluxMod(ChemicalDynamicCoefficient, gf, subset, 1.0);
+            dpro.R += BasisFunctions.GeoMag(
+                ExtractGeomagneticParameters(subset, ChemicalDynamicCoefficient),
+                geomagPrimary, geomagSecondary);
+            dpro.R += BasisFunctions.UtDep(
+                ExtractUTParameters(subset, ChemicalDynamicCoefficient),
+                utDependent);
+
+            dpro.ZetaR = subset.Beta[0, ChemicalDynamicReferenceHeight - bl];
+            dpro.HR = subset.Beta[0, ChemicalDynamicScaleHeight - bl];
+        }
+
+        /// <summary>
+        /// Computes density profile parameters for Atomic Hydrogen (H)
+        /// </summary>
+        private static void ComputeH1Parameters(DensityParameters dpro, double[] gf,
+                                                TemperatureProfile tpro,
+                                                double[] geomagPrimary, double[,] geomagSecondary,
+                                                double[] utDependent)
+        {
+            var subset = Initialization.H1;
+            int bl = subset.Bl;
+
+            // Reference parameters
+            dpro.LnPhiF = 0.0;
+            dpro.LnDRef = DotProduct(subset.Beta, 0, Constants.Mbf, LogReferenceDensity, gf, 0, Constants.Mbf);
+            dpro.ZRef = Constants.ZetaA;
+            dpro.ZMin = 75.0;
+            dpro.ZHyd = Constants.ZetaF;
+
+            // Turbopause and scale heights
+            dpro.ZetaM = subset.Beta[0, TurbopauseHeight - bl];
+            dpro.HML = subset.Beta[0, LowerScaleHeight - bl];
+            dpro.HMU = subset.Beta[0, UpperScaleHeight - bl];
+
+            // Chapman term
+            dpro.C = DotProduct(subset.Beta, 0, Constants.Mbf, ChapmanCoefficient, gf, 0, Constants.Mbf);
+            dpro.ZetaC = DotProduct(subset.Beta, 0, Constants.Mbf, ChapmanReferenceHeight, gf, 0, Constants.Mbf);
+            dpro.HC = subset.Beta[0, ChapmanScaleHeight - bl];
+
+            // Chemical/dynamical term (includes solar flux, geomagnetic, and UT effects)
+            dpro.R = DotProduct(subset.Beta, 0, Constants.Mbf, ChemicalDynamicCoefficient, gf, 0, Constants.Mbf);
+            dpro.R += BasisFunctions.SFluxMod(ChemicalDynamicCoefficient, gf, subset, 0.0);
+            dpro.R += BasisFunctions.GeoMag(
+                ExtractGeomagneticParameters(subset, ChemicalDynamicCoefficient),
+                geomagPrimary, geomagSecondary);
+            dpro.R += BasisFunctions.UtDep(
+                ExtractUTParameters(subset, ChemicalDynamicCoefficient),
+                utDependent);
+
+            dpro.ZetaR = subset.Beta[0, ChemicalDynamicReferenceHeight - bl];
+            dpro.HR = subset.Beta[0, ChemicalDynamicScaleHeight - bl];
+        }
+
+        /// <summary>
+        /// Computes density profile parameters for Argon (Ar)
+        /// </summary>
+        private static void ComputeArParameters(DensityParameters dpro, double[] gf,
+                                                TemperatureProfile tpro,
+                                                double[] geomagPrimary, double[,] geomagSecondary,
+                                                double[] utDependent)
+        {
+            var subset = Initialization.AR;
+            int bl = subset.Bl;
+
+            // Reference parameters
+            dpro.LnPhiF = Constants.LnVmr[7];
+            dpro.LnDRef = tpro.LnDTotF + dpro.LnPhiF;
+            dpro.ZRef = Constants.ZetaF;
+            dpro.ZMin = -1.0;
+            dpro.ZHyd = Constants.ZetaF;
+
+            // Turbopause and scale heights
+            dpro.ZetaM = subset.Beta[0, TurbopauseHeight - bl];
+            dpro.HML = subset.Beta[0, LowerScaleHeight - bl];
+            dpro.HMU = subset.Beta[0, UpperScaleHeight - bl];
+
+            // Chemical/dynamical term (includes geomagnetic and UT effects)
+            dpro.R = DotProduct(subset.Beta, 0, Constants.Mbf, ChemicalDynamicCoefficient, gf, 0, Constants.Mbf);
+            dpro.R += BasisFunctions.GeoMag(
+                ExtractGeomagneticParameters(subset, ChemicalDynamicCoefficient),
+                geomagPrimary, geomagSecondary);
+            dpro.R += BasisFunctions.UtDep(
+                ExtractUTParameters(subset, ChemicalDynamicCoefficient),
+                utDependent);
+
+            dpro.ZetaR = subset.Beta[0, ChemicalDynamicReferenceHeight - bl];
+            dpro.HR = subset.Beta[0, ChemicalDynamicScaleHeight - bl];
+        }
+
+        /// <summary>
+        /// Computes density profile parameters for Atomic Nitrogen (N)
+        /// </summary>
+        private static void ComputeN1Parameters(DensityParameters dpro, double[] gf,
+                                                TemperatureProfile tpro,
+                                                double[] geomagPrimary, double[,] geomagSecondary,
+                                                double[] utDependent)
+        {
+            var subset = Initialization.N1;
+            int bl = subset.Bl;
+
+            // Reference parameters (includes solar flux, geomagnetic, and UT effects)
+            dpro.LnPhiF = 0.0;
+            dpro.LnDRef = DotProduct(subset.Beta, 0, Constants.Mbf, LogReferenceDensity, gf, 0, Constants.Mbf);
+            dpro.LnDRef += BasisFunctions.SFluxMod(LogReferenceDensity, gf, subset, 0.0);
+            dpro.LnDRef += BasisFunctions.GeoMag(
+                ExtractGeomagneticParameters(subset, LogReferenceDensity),
+                geomagPrimary, geomagSecondary);
+            dpro.LnDRef += BasisFunctions.UtDep(
+                ExtractUTParameters(subset, LogReferenceDensity),
+                utDependent);
+
+            dpro.ZRef = Constants.ZetaB;  // Different from other species!
+            dpro.ZMin = 90.0;              // Different from other species!
+            dpro.ZHyd = Constants.ZetaF;
+
+            // Turbopause and scale heights
+            dpro.ZetaM = subset.Beta[0, TurbopauseHeight - bl];
+            dpro.HML = subset.Beta[0, LowerScaleHeight - bl];
+            dpro.HMU = subset.Beta[0, UpperScaleHeight - bl];
+
+            // Chapman term (from Beta, not DotProduct!)
+            dpro.C = subset.Beta[0, ChapmanCoefficient - bl];
+            dpro.ZetaC = subset.Beta[0, ChapmanReferenceHeight - bl];
+            dpro.HC = subset.Beta[0, ChapmanScaleHeight - bl];
+
+            // Chemical/dynamical term
+            dpro.R = DotProduct(subset.Beta, 0, Constants.Mbf, ChemicalDynamicCoefficient, gf, 0, Constants.Mbf);
+            dpro.ZetaR = subset.Beta[0, ChemicalDynamicReferenceHeight - bl];
+            dpro.HR = subset.Beta[0, ChemicalDynamicScaleHeight - bl];
+        }
+
+        /// <summary>
+        /// Computes density profile parameters for Anomalous Oxygen (O*)
+        /// Legacy MSISE-00 formulation - simpler than other species
+        /// </summary>
+        private static void ComputeOAParameters(DensityParameters dpro, double[] gf,
+                                                TemperatureProfile tpro,
+                                                double[] geomagPrimary, double[,] geomagSecondary,
+                                                double[] utDependent)
+        {
+            var subset = Initialization.OA;
+            int bl = subset.Bl;
+
+            // Reference parameters (includes geomagnetic effects only)
+            dpro.LnDRef = DotProduct(subset.Beta, 0, Constants.Mbf, LogReferenceDensity, gf, 0, Constants.Mbf);
+            dpro.LnDRef += BasisFunctions.GeoMag(
+                ExtractGeomagneticParameters(subset, LogReferenceDensity),
+                geomagPrimary, geomagSecondary);
+
+            dpro.ZRef = Constants.ZetaRefOA;  // Different from other species!
+            dpro.ZMin = 120.0;                 // Different from other species!
+            dpro.ZHyd = 0.0;                   // Different from other species!
+
+            // Chapman term (from Beta, not DotProduct!)
+            dpro.C = subset.Beta[0, ChapmanCoefficient - bl];
+            dpro.ZetaC = subset.Beta[0, ChapmanReferenceHeight - bl];
+            dpro.HC = subset.Beta[0, ChapmanScaleHeight - bl];
+
+            // No turbopause or R term - returns here in original
+            // Legacy formulation uses simpler exponential profile
+        }
+
+        /// <summary>
+        /// Computes density profile parameters for Nitric Oxide (NO)
+        /// </summary>
+        private static void ComputeNOParameters(DensityParameters dpro, double[] gf,
+                                                TemperatureProfile tpro,
+                                                double[] geomagPrimary, double[,] geomagSecondary,
+                                                double[] utDependent)
+        {
+            var subset = Initialization.NO;
+            int bl = subset.Bl;
+
+            // Skip if parameters are not defined
+            if (subset.Beta[0, LogReferenceDensity - bl] == 0.0)
+            {
+                dpro.LnDRef = 0.0;
+                return;
+            }
+
+            // Reference parameters (includes geomagnetic effects only - no SFlux or UT!)
+            dpro.LnPhiF = 0.0;
+            dpro.LnDRef = DotProduct(subset.Beta, 0, Constants.Mbf, LogReferenceDensity, gf, 0, Constants.Mbf);
+            dpro.LnDRef += BasisFunctions.GeoMag(
+                ExtractGeomagneticParameters(subset, LogReferenceDensity),
+                geomagPrimary, geomagSecondary);
+
+            dpro.ZRef = Constants.ZetaRefNO;  // Different from other species!
+            dpro.ZMin = 72.5;                  // Different from other species!
+            dpro.ZHyd = Constants.ZetaRefNO;   // Different from other species!
+
+            // Turbopause and scale heights (from DotProduct, not Beta!)
+            dpro.ZetaM = DotProduct(subset.Beta, 0, Constants.Mbf, TurbopauseHeight, gf, 0, Constants.Mbf);
+            dpro.HML = DotProduct(subset.Beta, 0, Constants.Mbf, LowerScaleHeight, gf, 0, Constants.Mbf);
+            dpro.HMU = DotProduct(subset.Beta, 0, Constants.Mbf, UpperScaleHeight, gf, 0, Constants.Mbf);
+
+            // Chapman term (DotProduct AND geomagnetic!)
+            dpro.C = DotProduct(subset.Beta, 0, Constants.Mbf, ChapmanCoefficient, gf, 0, Constants.Mbf);
+            dpro.C += BasisFunctions.GeoMag(
+                ExtractGeomagneticParameters(subset, ChapmanCoefficient),
+                geomagPrimary, geomagSecondary);
+            dpro.ZetaC = DotProduct(subset.Beta, 0, Constants.Mbf, ChapmanReferenceHeight, gf, 0, Constants.Mbf);
+            dpro.HC = DotProduct(subset.Beta, 0, Constants.Mbf, ChapmanScaleHeight, gf, 0, Constants.Mbf);
+
+            // Chemical/dynamical term (from DotProduct, not Beta!)
+            dpro.R = DotProduct(subset.Beta, 0, Constants.Mbf, ChemicalDynamicCoefficient, gf, 0, Constants.Mbf);
+            dpro.ZetaR = DotProduct(subset.Beta, 0, Constants.Mbf, ChemicalDynamicReferenceHeight, gf, 0, Constants.Mbf);
+            dpro.HR = DotProduct(subset.Beta, 0, Constants.Mbf, ChemicalDynamicScaleHeight, gf, 0, Constants.Mbf);
+
+            // Unconstrained splines (with geomagnetic effects)
+            for (int splineIndex = 0; splineIndex < Constants.NsplNO; splineIndex++)
+            {
+                int columnIndex = splineIndex + 10;  // Spline coefficients start at column 10
+                dpro.Cf[splineIndex] = DotProduct(subset.Beta, 0, Constants.Mbf, columnIndex, gf, 0, Constants.Mbf);
+                dpro.Cf[splineIndex] += BasisFunctions.GeoMag(
+                    ExtractGeomagneticParameters(subset, columnIndex),
+                    geomagPrimary, geomagSecondary);
+            }
+        }
+
+        // ==================================================================================================
+        // HELPER METHODS
+        // ==================================================================================================
+
+        /// <summary>
+        /// Extracts UT-dependent parameters for a given column from a basis subset
+        /// </summary>
+        private static double[] ExtractUTParameters(BasisSubset subset, int column)
+        {
+            double[] parameters = new double[Constants.NUt];
+            int columnIndex = column - subset.Bl;
+
+            for (int i = 0; i < Constants.NUt; i++)
+            {
+                parameters[i] = subset.Beta[Constants.CUt + i, columnIndex];
+            }
+
+            return parameters;
+        }
+
+        /// <summary>
+        /// Computes dot product of two arrays with specified ranges
+        /// </summary>
+        private static double DotProduct(double[,] beta, int betaRow1, int betaRow2, int betaCol,
+                                        double[] gf, int gfStart, int gfEnd)
+        {
+            double sum = 0.0;
+            for (int j = betaRow1; j <= betaRow2; j++)
+            {
+                if (j >= gfStart && j <= gfEnd)
+                {
+                    sum += beta[j, betaCol] * gf[j];
+                }
+            }
+            return sum;
+        }
+
+        // ==================================================================================================
+        // DFN_X: Compute number density at given altitude
+        // ==================================================================================================
+
+        /// <summary>
+        /// Compute number density at specified altitude given profile parameters.
+        /// Uses hydrostatic equilibrium with temperature-dependent scale heights.
+        /// </summary>
+        /// <param name="z">Altitude (km)</param>
+        /// <param name="tnz">Temperature at altitude (K)</param>
+        /// <param name="lndtotz">Natural log of total number density at altitude</param>
+        /// <param name="Vz">Indefinite integral V(z) at altitude</param>
+        /// <param name="Wz">Indefinite integral W(z) at altitude</param>
+        /// <param name="HRfact">Scale height correction factor</param>
+        /// <param name="tpro">Temperature profile parameters</param>
+        /// <param name="dpro">Density profile parameters</param>
+        /// <returns>Number density (m^-3) or DMissing if below minimum altitude</returns>
+        public static double DfnX(double z, double tnz, double lndtotz,
+                                 double Vz, double Wz, double HRfact,
+                                 TemperatureProfile tpro, DensityParameters dpro)
+        {
             // Below minimum height of profile
             if (z < dpro.ZMin)
             {
                 return Constants.DMissing;
             }
 
-            // Anomalous Oxygen (legacy MSISE-00 formulation)
+            // Special case: Anomalous Oxygen (legacy MSISE-00 formulation)
             if (dpro.ISpec == 9)
             {
-                dfnx = dpro.LnDRef - (z - dpro.ZRef) / Constants.HOA - dpro.C * Math.Exp(-(z - dpro.ZetaC) / dpro.HC);
-                return Math.Exp(dfnx);
+                return ComputeAnomalousOxygenDensity(z, dpro);
             }
 
-            // Nitric Oxide: Skip if parameters are not defined
-            if (dpro.ISpec == 10)
+            // Special case: Nitric Oxide - skip if parameters not defined
+            if (dpro.ISpec == 10 && dpro.LnDRef == 0.0)
             {
-                if (dpro.LnDRef == 0.0)
-                {
-                    return Constants.DMissing;
-                }
+                return Constants.DMissing;
             }
 
-            // Chapman and logistic corrections
-            switch (dpro.ISpec)
-            {
-                case 2:
-                case 3:
-                case 5:
-                case 7: // For N2, O2, He, and Ar: logistic correction only
-                    ccor = dpro.R * (1 + Math.Tanh((z - dpro.ZetaR) / (HRfact * dpro.HR)));
-                    break;
-                case 4:
-                case 6:
-                case 8:
-                case 10: // For O, H, N, and NO: Chapman and logistic corrections
-                    ccor = -dpro.C * Math.Exp(-(z - dpro.ZetaC) / dpro.HC)
-                         + dpro.R * (1 + Math.Tanh((z - dpro.ZetaR) / (HRfact * dpro.HR)));
-                    break;
-                default:
-                    ccor = 0.0;
-                    break;
-            }
+            // Compute Chapman and logistic corrections
+            double ccor = ComputeDensityCorrection(z, HRfact, dpro);
 
             // Below height where hydrostatic terms are needed
             if (z < dpro.ZHyd)
             {
-                switch (dpro.ISpec)
+                return ComputeDensityBelowHydrostaticRegion(z, lndtotz, ccor, dpro);
+            }
+
+            // Compute density using hydrostatic equilibrium
+            return ComputeDensityWithHydrostaticEquilibrium(z, tnz, Vz, Wz, ccor, dpro);
+        }
+
+        /// <summary>
+        /// Computes density for anomalous oxygen using legacy MSISE-00 formulation
+        /// </summary>
+        private static double ComputeAnomalousOxygenDensity(double altitude, DensityParameters dpro)
+        {
+            double lnDensity = dpro.LnDRef
+                             - (altitude - dpro.ZRef) / Constants.HOA
+                             - dpro.C * Math.Exp(-(altitude - dpro.ZetaC) / dpro.HC);
+
+            return Math.Exp(lnDensity);
+        }
+
+        /// <summary>
+        /// Computes Chapman and logistic density corrections based on species type
+        /// </summary>
+        private static double ComputeDensityCorrection(double altitude, double scaleHeightFactor,
+                                                       DensityParameters dpro)
+        {
+            switch (dpro.ISpec)
+            {
+                case 2:  // N2
+                case 3:  // O2
+                case 5:  // He
+                case 7:  // Ar
+                    // Major species: logistic correction only
+                    return ComputeLogisticCorrection(altitude, scaleHeightFactor, dpro);
+
+                case 4:  // O
+                case 6:  // H
+                case 8:  // N
+                case 10: // NO
+                    // Minor species: Chapman and logistic corrections
+                    return ComputeChapmanCorrection(altitude, dpro)
+                         + ComputeLogisticCorrection(altitude, scaleHeightFactor, dpro);
+
+                default:
+                    return 0.0;
+            }
+        }
+
+        /// <summary>
+        /// Computes Chapman profile correction term
+        /// </summary>
+        private static double ComputeChapmanCorrection(double altitude, DensityParameters dpro)
+        {
+            return -dpro.C * Math.Exp(-(altitude - dpro.ZetaC) / dpro.HC);
+        }
+
+        /// <summary>
+        /// Computes logistic function correction term
+        /// </summary>
+        private static double ComputeLogisticCorrection(double altitude, double scaleHeightFactor,
+                                                        DensityParameters dpro)
+        {
+            return dpro.R * (1.0 + Math.Tanh((altitude - dpro.ZetaR) / (scaleHeightFactor * dpro.HR)));
+        }
+
+        /// <summary>
+        /// Computes density below the hydrostatic region using mixing ratios or splines
+        /// </summary>
+        private static double ComputeDensityBelowHydrostaticRegion(double altitude, double lnTotalDensity,
+                                                                    double correction, DensityParameters dpro)
+        {
+            switch (dpro.ISpec)
+            {
+                case 2:  // N2
+                case 3:  // O2
+                case 5:  // He
+                case 7:  // Ar
+                    // Major species: use mixing ratio
+                    return Math.Exp(lnTotalDensity + dpro.LnPhiF + correction);
+
+                case 4:  // O
+                    // Atomic oxygen: use spline interpolation
+                    return EvaluateOxygenSpline(altitude, dpro);
+
+                case 10: // NO
+                    // Nitric oxide: use spline interpolation
+                    return EvaluateNitricOxideSpline(altitude, dpro);
+
+                default:
+                    // H, N, O*: shouldn't reach here (they use hydrostatic above ZMin)
+                    return Math.Exp(lnTotalDensity + correction);
+            }
+        }
+
+        /// <summary>
+        /// Evaluates cubic B-spline for atomic oxygen density
+        /// </summary>
+        private static double EvaluateOxygenSpline(double altitude, DensityParameters dpro)
+        {
+            const int cubicOrder = 4;
+            Utilities.BSpline(altitude, Constants.NodesO1, Constants.NdO1, cubicOrder,
+                            Initialization.EtaO1, out double[,] splineValues, out int intervalIndex);
+
+            // Compute dot product: dpro.Cf[iz-3:iz] · Sz[-3:0, 4]
+            // Sz[-3:0, 4] maps to Sz[2:5, 2] in C# (spline indices -3,-2,-1,0 → array indices 2,3,4,5)
+            double lnDensity = 0.0;
+            for (int j = 0; j <= 3; j++)
+            {
+                int coefficientIndex = intervalIndex - 3 + j;
+                int splineArrayIndex = j + 2;  // Maps Fortran -3+j to C# array index
+                lnDensity += dpro.Cf[coefficientIndex] * splineValues[splineArrayIndex, 2];  // Order 4 → index 2
+            }
+
+            return Math.Exp(lnDensity);
+        }
+
+        /// <summary>
+        /// Evaluates cubic B-spline for nitric oxide density
+        /// </summary>
+        private static double EvaluateNitricOxideSpline(double altitude, DensityParameters dpro)
+        {
+            const int cubicOrder = 4;
+            Utilities.BSpline(altitude, Constants.NodesNO, Constants.NdNO, cubicOrder,
+                            Initialization.EtaNO, out double[,] splineValues, out int intervalIndex);
+
+            // Compute dot product: dpro.Cf[iz-3:iz] · Sz[-3:0, 4]
+            double lnDensity = 0.0;
+            for (int j = 0; j <= 3; j++)
+            {
+                int coefficientIndex = intervalIndex - 3 + j;
+                int splineArrayIndex = j + 2;
+                lnDensity += dpro.Cf[coefficientIndex] * splineValues[splineArrayIndex, 2];
+            }
+
+            return Math.Exp(lnDensity);
+        }
+
+        /// <summary>
+        /// Computes density using full hydrostatic equilibrium
+        /// </summary>
+        private static double ComputeDensityWithHydrostaticEquilibrium(double altitude,
+                                                                       double temperatureAtAltitude,
+                                                                       double Vz, double Wz,
+                                                                       double correction,
+                                                                       DensityParameters dpro)
+        {
+            // Calculate effective mass at altitude
+            double effectiveMass = ComputePiecewiseMass(altitude, dpro.ZetaMi, dpro.Mi, dpro.AMi);
+
+            // Calculate hydrostatic integral
+            double hydrostaticIntegral = effectiveMass * Vz - dpro.IzRef;
+
+            // Apply piecewise corrections if within node range
+            if (altitude > dpro.ZetaMi[0] && altitude < dpro.ZetaMi[4])
+            {
+                int nodeIndex = FindNodeIndex(altitude, dpro.ZetaMi);
+                hydrostaticIntegral -= (dpro.AMi[nodeIndex] * Wz + dpro.XMi[nodeIndex]);
+            }
+            else if (altitude >= dpro.ZetaMi[4])
+            {
+                hydrostaticIntegral -= dpro.XMi[4];
+            }
+
+            // Compute log density at altitude
+            double lnDensity = dpro.LnDRef - hydrostaticIntegral * Constants.G0DivKB + correction;
+
+            // Apply ideal gas law: n(z) = n_ref * (T_ref / T(z)) * exp(...)
+            double density = Math.Exp(lnDensity) * dpro.TRef / temperatureAtAltitude;
+
+            return density;
+        }
+
+        /// <summary>
+        /// Finds the node index for piecewise mass profile
+        /// </summary>
+        private static int FindNodeIndex(double altitude, double[] nodeHeights)
+        {
+            for (int nodeIndex = 0; nodeIndex <= 3; nodeIndex++)
+            {
+                if (altitude < nodeHeights[nodeIndex + 1])
                 {
-                    case 2:
-                    case 3:
-                    case 5:
-                    case 7: // For N2, O2, He, and Ar, apply mixing ratios and exit
-                        return Math.Exp(lndtotz + dpro.LnPhiF + ccor);
-
-                    case 4: // For O, evaluate splines
-                        Utilities.BSpline(z, Constants.NodesO1, Constants.NdO1, 4, Initialization.EtaO1, out Sz, out iz);
-                        // Fortran: dot_product(dpro%cf(iz-3:iz), Sz(-3:0,4))
-                        // Sz(-3:0,4) maps to Sz[2:5, 2] (order 4 -> index 2)
-                        dfnx = 0.0;
-                        for (int j = 0; j <= 3; j++)
-                        {
-                            dfnx += dpro.Cf[iz - 3 + j] * Sz[j + 2, 2];
-                        }
-                        return Math.Exp(dfnx);
-
-                    case 10: // For NO, evaluate splines
-                        Utilities.BSpline(z, Constants.NodesNO, Constants.NdNO, 4, Initialization.EtaNO, out Sz, out iz);
-                        // Fortran: dot_product(dpro%cf(iz-3:iz), Sz(-3:0,4))
-                        // Sz(-3:0,4) maps to Sz[2:5, 2] (order 4 -> index 2)
-                        dfnx = 0.0;
-                        for (int j = 0; j <= 3; j++)
-                        {
-                            dfnx += dpro.Cf[iz - 3 + j] * Sz[j + 2, 2];
-                        }
-                        return Math.Exp(dfnx);
+                    return nodeIndex;
                 }
             }
-
-            // Calculate hydrostatic term and apply to reference density
-            Mz = Pwmp(z, dpro.ZetaMi, dpro.Mi, dpro.AMi);
-            Ihyd = Mz * Vz - dpro.IzRef;
-            if ((z > dpro.ZetaMi[0]) && (z < dpro.ZetaMi[4]))
-            {
-                i = 0;
-                for (i1 = 1; i1 <= 3; i1++)
-                {
-                    if (z < dpro.ZetaMi[i1])
-                    {
-                        break;
-                    }
-                    else
-                    {
-                        i = i1;
-                    }
-                }
-                Ihyd = Ihyd - (dpro.AMi[i] * Wz + dpro.XMi[i]);
-            }
-            else if (z >= dpro.ZetaMi[4])
-            {
-                Ihyd = Ihyd - dpro.XMi[4];
-            }
-
-            dfnx = dpro.LnDRef - Ihyd * Constants.G0DivKB + ccor;
-
-            // Apply ideal gas law
-            dfnx = Math.Exp(dfnx) * dpro.TRef / tnz;
-
-            return dfnx;
+            return 3; // Should not reach here if altitude < nodeHeights[4]
         }
 
         // ==================================================================================================
         // PWMP: Piecewise effective mass profile interpolation
         // ==================================================================================================
+
         /// <summary>
-        /// Piecewise effective mass profile interpolation
+        /// Computes piecewise linear effective mass profile.
+        /// Mass varies linearly between nodes to account for changing atmospheric composition.
         /// </summary>
-        private static double Pwmp(double z, double[] zm, double[] m, double[] dmdz)
+        /// <param name="altitude">Altitude (km)</param>
+        /// <param name="nodeHeights">Heights of mass profile nodes (km)</param>
+        /// <param name="nodeMasses">Effective masses at nodes (amu)</param>
+        /// <param name="massSlopes">Slopes of mass profile between nodes (amu/km)</param>
+        /// <returns>Effective mass at altitude (amu)</returns>
+        private static double ComputePiecewiseMass(double altitude, double[] nodeHeights,
+                                                   double[] nodeMasses, double[] massSlopes)
         {
-            // Most probable case
-            if (z >= zm[4])
+            // Most probable case: above highest node
+            if (altitude >= nodeHeights[4])
             {
-                return m[4];
+                return nodeMasses[4];
             }
 
-            // Second most probable case
-            if (z <= zm[0])
+            // Second most probable case: below lowest node
+            if (altitude <= nodeHeights[0])
             {
-                return m[0];
+                return nodeMasses[0];
             }
 
-            // None of the above
-            for (int inode = 0; inode <= 3; inode++)
+            // Between nodes: linear interpolation
+            for (int nodeIndex = 0; nodeIndex <= 3; nodeIndex++)
             {
-                if (z < zm[inode + 1])
+                if (altitude < nodeHeights[nodeIndex + 1])
                 {
-                    return m[inode] + dmdz[inode] * (z - zm[inode]);
+                    return nodeMasses[nodeIndex] + massSlopes[nodeIndex] * (altitude - nodeHeights[nodeIndex]);
                 }
             }
 
-            // If we are here this is a problem
-            throw new InvalidOperationException("Error in pwmp");
+            // Should never reach here
+            throw new InvalidOperationException("Error in piecewise mass profile computation");
         }
 
-        // Helper method for dot product between subset Beta array and gf array
-        private static double DotProduct(double[,] beta, int betaRowStart, int betaRowEnd, int betaCol,
-                                        double[] gf, int gfStart, int gfEnd)
-        {
-            double sum = 0.0;
-            int gfIdx = gfStart;
-
-            // Determine which subset this is to get the correct Bl offset
-            int blOffset = 0;
-            if (beta == Initialization.TN.Beta) blOffset = Initialization.TN.Bl;
-            else if (beta == Initialization.PR.Beta) blOffset = Initialization.PR.Bl;
-            else if (beta == Initialization.N2.Beta) blOffset = Initialization.N2.Bl;
-            else if (beta == Initialization.O2.Beta) blOffset = Initialization.O2.Bl;
-            else if (beta == Initialization.O1.Beta) blOffset = Initialization.O1.Bl;
-            else if (beta == Initialization.HE.Beta) blOffset = Initialization.HE.Bl;
-            else if (beta == Initialization.H1.Beta) blOffset = Initialization.H1.Bl;
-            else if (beta == Initialization.AR.Beta) blOffset = Initialization.AR.Bl;
-            else if (beta == Initialization.N1.Beta) blOffset = Initialization.N1.Bl;
-            else if (beta == Initialization.OA.Beta) blOffset = Initialization.OA.Bl;
-            else if (beta == Initialization.NO.Beta) blOffset = Initialization.NO.Bl;
-
-            for (int i = betaRowStart; i <= betaRowEnd; i++)
-            {
-                sum += beta[i, betaCol - blOffset] * gf[gfIdx];
-                gfIdx++;
-            }
-            return sum;
-        }
     }
 }
