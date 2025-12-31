@@ -3,3 +3,4 @@
 /NRMLSIS/bin
 msis2.1_test_out.txt
 msis2.1_test_compare.txt
+/NRMLSIS/BenchmarkDotNet.Artifacts

@@ -16,7 +16,7 @@ namespace NRLMSIS.Testing
         private const int SAMPLES_PER_SET = 1000;
         private static readonly Random random = new Random(42); // Fixed seed for reproducibility
 
-        public static void Main(string[] args)
+        public static void RunTest(string[] args)
         {
             Console.WriteLine("========================================================================");
             Console.WriteLine("           NRLMSIS 2.1 Performance Evaluation - 1000 Samples           ");
@@ -192,6 +192,9 @@ namespace NRLMSIS.Testing
 
         static void PrintTestResults(TestResults results)
         {
+            if (results.SampleTimes == null)
+                return;
+
             var sortedTimes = results.SampleTimes.OrderBy(t => t).ToList();
             double minTime = sortedTimes.First();
             double maxTime = sortedTimes.Last();
@@ -235,6 +238,9 @@ namespace NRLMSIS.Testing
 
         static void PrintComparison(TestResults set1, TestResults set2)
         {
+            if (set1.SampleTimes == null || set2.SampleTimes == null)
+                return;
+
             double set1Avg = set1.SampleTimes.Average();
             double set2Avg = set2.SampleTimes.Average();
             double speedRatio = set2Avg / set1Avg;
@@ -356,9 +362,9 @@ namespace NRLMSIS.Testing
 
         class TestResults
         {
-            public string SetName { get; set; }
+            public string? SetName { get; set; }
             public TimeSpan TotalTime { get; set; }
-            public List<double> SampleTimes { get; set; }
+            public List<double>? SampleTimes { get; set; }
             public int SamplesProcessed { get; set; }
             public int GCGen0 { get; set; }
             public int GCGen1 { get; set; }

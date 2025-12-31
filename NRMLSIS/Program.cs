@@ -1,8 +1,10 @@
 using NRLMSIS.Testing;
-PerformanceEvaluation.Main([]);
+BenchmarkSpecific.RunBenchmark();
 // using NRLMSIS.Core;
 // using NRLMSIS.Models;
 // using NRLMSIS.Infrastructure;
+// using BenchmarkDotNet.Attributes;
+// using BenchmarkDotNet.Running;
 
 // // Initialize once at startup (loads parameters from file)
 // Initialization.Initialize(parmPath: "../", parmFile: "msis21.parm");
