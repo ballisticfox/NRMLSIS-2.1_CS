@@ -6,9 +6,9 @@ using NRLMSIS.Infrastructure;
 
 namespace NRLMSIS.Testing
 {
-    class Testing
+    class LegacyTest
     {
-        public static void RunTest(string[] args)
+        public static void RunTest()
         {
             const int NRec = 200;
             int iyd;
