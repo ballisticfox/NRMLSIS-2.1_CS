@@ -41,13 +41,13 @@ namespace NRLMSIS.Configuration
         public IReadOnlyList<DensityConfiguration> Species { get; }
 
         /// <summary>Gets the B-spline eta for temperature nodes.</summary>
-        public double[,] TemperatureEta { get; }
+        public double[,]? TemperatureEta { get; }
 
         /// <summary>Gets the B-spline eta for O1 nodes.</summary>
-        public double[,] O1Eta { get; }
+        public double[,]? O1Eta { get; }
 
         /// <summary>Gets the B-spline eta for NO nodes.</summary>
-        public double[,] NOEta { get; }
+        public double[,]? NOEta { get; }
 
         private MSISConfiguration(Builder builder)
         {
@@ -125,11 +125,11 @@ namespace NRLMSIS.Configuration
             public double[] LegacySwitches { get; set; }
             public bool UseGeodeticAltitude { get; set; }
             public bool UseNrlmsise00N2 { get; set; }
-            public TemperatureConfiguration Temperature { get; set; }
+            public TemperatureConfiguration? Temperature { get; set; }
             public List<DensityConfiguration> Species { get; set; }
-            public double[,] TemperatureEta { get; set; }
-            public double[,] O1Eta { get; set; }
-            public double[,] NOEta { get; set; }
+            public double[,]? TemperatureEta { get; set; }
+            public double[,]? O1Eta { get; set; }
+            public double[,]? NOEta { get; set; }
 
             public Builder()
             {

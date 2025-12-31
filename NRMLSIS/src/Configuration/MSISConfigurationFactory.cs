@@ -15,7 +15,7 @@ using NRLMSIS.Infrastructure;
 namespace NRLMSIS.Configuration
 {
     /// <summary>
-    /// Helper class to convert between legacy Initialization and immutable MsisConfiguration.
+    /// Helper class to convert between legacy Initialization and immutable MSISConfiguration.
     /// Bridge for backward compatibility.
     /// </summary>
     public static class MsisConfigurationFactory

@@ -102,7 +102,7 @@ namespace NRLMSIS.Core
         /// <summary>
         /// Determines whether this location equals an object.
         /// </summary>
-        public override bool Equals(object obj) =>
+        public override bool Equals(object? obj) =>
             obj is AtmosphericLocation location && Equals(location);
 
         /// <summary>

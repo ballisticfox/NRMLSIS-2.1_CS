@@ -37,7 +37,7 @@ namespace NRLMSIS.Exceptions
             string message,
             AtmosphericLocation location,
             SpaceWeather weather,
-            Exception innerException = null)
+            Exception innerException)
             : base(message, innerException)
         {
             Location = location;

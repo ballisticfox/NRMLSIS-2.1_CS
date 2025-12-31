@@ -94,7 +94,7 @@ namespace NRLMSIS.Core
         /// <summary>
         /// Determines whether this space weather equals an object.
         /// </summary>
-        public override bool Equals(object obj) =>
+        public override bool Equals(object? obj) =>
             obj is SpaceWeather weather && Equals(weather);
 
         /// <summary>

@@ -1,5 +1,5 @@
 using NRLMSIS.Testing;
-NRLMSIS.Testing.Testing.Main([]);
+PerformanceEvaluation.Main([]);
 // using NRLMSIS.Core;
 // using NRLMSIS.Models;
 // using NRLMSIS.Infrastructure;
